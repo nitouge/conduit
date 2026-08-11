@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge.conduit</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>conduit-server</artifactId>
+    <name>conduit-server</name>
+    <description>服务端：服务暴露、@RpcService扫描、反射分发与向注册中心注册。</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-common</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-remoting</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-registry</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-serialization</artifactId>
+        </dependency>
+
+        <!-- 服务端是提供方，不需要消费侧的conduit-cluster（容错/负载均衡）。 -->
+    </dependencies>
+</project>

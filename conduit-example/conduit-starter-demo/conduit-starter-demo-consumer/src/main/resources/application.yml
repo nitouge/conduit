@@ -1,0 +1,17 @@
+server:
+  port: 8080                       # 本进程对外的HTTP端口
+
+spring:
+  application:
+    name: conduit-starter-demo-consumer
+
+# 只引入conduit-spring-boot-starter即自动装配（无需@EnableConduit）。
+# 从Nacos发现provider；本进程不暴露任何@RpcService，故不会启动RPC服务端、不占RPC端口。
+conduit:
+  application:
+    name: greet-consumer
+  registry:
+    type: nacos
+    address: 127.0.0.1:8848        # 与provider指向同一个Nacos
+  protocol:
+    serialization: kryo            # 必须与provider一致，否则反序列化失败

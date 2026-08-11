@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge.conduit</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>conduit-spring</artifactId>
+    <name>conduit-spring</name>
+    <description>Spring整合注解自动注入与自动配置</description>
+
+    <dependencies>
+        <!-- 引入本模块即级联拿到客户端 + 服务端及全部底层模块。 -->
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-client</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-server</artifactId>
+        </dependency>
+
+        <!-- M5 Spring整合（版本由父POM导入的spring-boot-dependencies BOM管理） -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+    </dependencies>
+</project>

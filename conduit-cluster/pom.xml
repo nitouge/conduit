@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge.conduit</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>conduit-cluster</artifactId>
+    <name>conduit-cluster</name>
+    <description>集群容错：LoadBalancer、Cluster、CircuitBreaker</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-common</artifactId>
+        </dependency>
+
+        <!-- 只依赖api（ServiceMeta/RpcRequest/RpcResponse）与common；不依赖registry，也不依赖remoting：
+             节点列表由client在调用时传入，真正的远程发送由client注入的RemoteInvoker完成。 -->
+    </dependencies>
+</project>

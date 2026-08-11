@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge.conduit</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>conduit-common</artifactId>
+    <name>conduit-common</name>
+    <description>公共基础：常量、工具类、异常体系，以及SPI引擎</description>
+
+    <!-- 最底层基础模块：仅依赖最底层契约模块conduit-api（api不依赖任何conduit模块，不成环）。 -->
+    <dependencies>
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-collections4</artifactId>
+        </dependency>
+    </dependencies>
+</project>

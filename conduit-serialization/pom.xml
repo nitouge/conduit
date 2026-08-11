@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge.conduit</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>conduit-serialization</artifactId>
+    <name>conduit-serialization</name>
+    <description>序列化抽象与实现</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge.conduit</groupId>
+            <artifactId>conduit-common</artifactId>
+        </dependency>
+
+        <!-- M3：三种序列化实现的依赖（版本由父POM锁定）。本项目把四种序列化放在同一模块，
+             故按非optional引入，随conduit-serialization传递可用，ExtensionLoader才能加载全部实现。 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.protostuff</groupId>
+            <artifactId>protostuff-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.protostuff</groupId>
+            <artifactId>protostuff-runtime</artifactId>
+        </dependency>
+
+    </dependencies>
+</project>

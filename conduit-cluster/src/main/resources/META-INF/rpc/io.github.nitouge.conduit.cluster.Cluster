@@ -1,0 +1,5 @@
+# Cluster SPI扩展注册（name=实现类全限定名），由ExtensionLoader按名加载
+failover=io.github.nitouge.conduit.cluster.support.FailoverCluster
+failfast=io.github.nitouge.conduit.cluster.support.FailfastCluster
+failsafe=io.github.nitouge.conduit.cluster.support.FailsafeCluster
+failback=io.github.nitouge.conduit.cluster.support.FailbackCluster

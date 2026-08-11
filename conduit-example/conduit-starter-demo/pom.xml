@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge.conduit</groupId>
+        <artifactId>conduit-example</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>conduit-starter-demo</artifactId>
+    <packaging>pom</packaging>
+    <name>conduit-starter-demo</name>
+    <description>演示两个独立Spring Boot进程经注册中心服务发现完成跨进程RPC调用</description>
+
+    <modules>
+        <module>conduit-starter-demo-api</module>
+        <module>conduit-starter-demo-provider</module>
+        <module>conduit-starter-demo-consumer</module>
+    </modules>
+</project>

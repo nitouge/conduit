@@ -1,0 +1,5 @@
+# Serializer SPI扩展注册（name=实现类全限定名），由ExtensionLoader按名加载
+jdk=io.github.nitouge.conduit.serialization.support.JdkSerializer
+json=io.github.nitouge.conduit.serialization.support.JsonSerializer
+kryo=io.github.nitouge.conduit.serialization.support.KryoSerializer
+protostuff=io.github.nitouge.conduit.serialization.support.ProtostuffSerializer

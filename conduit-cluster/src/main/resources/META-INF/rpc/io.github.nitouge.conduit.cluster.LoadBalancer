@@ -1,0 +1,4 @@
+# LoadBalancer SPI扩展注册（name=实现类全限定名），由ExtensionLoader按名加载
+random=io.github.nitouge.conduit.cluster.loadbalance.RandomLoadBalancer
+roundrobin=io.github.nitouge.conduit.cluster.loadbalance.RoundRobinLoadBalancer
+consistenthash=io.github.nitouge.conduit.cluster.loadbalance.ConsistentHashLoadBalancer

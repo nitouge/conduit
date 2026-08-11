@@ -1,0 +1,5 @@
+# RegistryFactory SPI扩展注册（name=实现类全限定名），由ExtensionLoader按scheme加载
+nacos=io.github.nitouge.conduit.registry.nacos.NacosRegistryFactory
+local=io.github.nitouge.conduit.registry.local.InMemoryRegistryFactory
+# zookeeper=io.github.nitouge.conduit.registry.zookeeper.ZookeeperRegistryFactory
+# etcd=io.github.nitouge.conduit.registry.etcd.EtcdRegistryFactory

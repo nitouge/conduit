@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 引入Spring Boot默认配置 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <property name="console.log.pattern"
+              value="%red(%d{yyyy-MM-dd HH:mm:ss}) %green([%thread]) %highlight(%-5level) %boldMagenta(%logger{36}) - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${console.log.pattern}</pattern>
+            <charset>utf-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 访问日志：独立控制，生产环境也需要（INFO 级别） -->
+    <logger name="CONDUIT.ACCESS" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- 框架链路日志：非prod（默认/dev/test）全开DEBUG，便于观察RPC协议工作细节；prod收到INFO -->
+    <springProfile name="!prod">
+        <logger name="io.github.nitouge.conduit" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="prod">
+        <logger name="io.github.nitouge.conduit" level="INFO"/>
+    </springProfile>
+
+    <!-- 根日志：保持INFO，避免第三方库刷屏 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!--
+    使用说明：
+    1. 默认（无profile）与dev/test 一样：框架日志为DEBUG，追踪完整链路
+    2. 启动时指定profile切换：
+       -Dspring.profiles.active=prod     → 框架INFO，只看关键节点（发版用）
+    3. 若需关闭访问日志（AccessLogFilter），可改CONDUIT.ACCESS为WARN或用系统属性：
+       -Dconduit.filter.accesslog.enabled=false
+    4. 纯Java（不带Spring）场景：复制本文件改名logback.xml，去掉<springProfile>标签，
+       直接写死一个level（如<logger name="io.github.nitouge.conduit" level="DEBUG"/>）
+    -->
+</configuration>

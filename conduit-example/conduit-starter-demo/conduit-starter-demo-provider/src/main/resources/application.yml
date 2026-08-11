@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: conduit-starter-demo-provider
+
+# 只引入conduit-spring-boot-starter即自动装配（无需@EnableConduit）。
+# 用Nacos作为跨进程共享注册中心：provider在此注册，consumer另一个进程从这里发现。
+conduit:
+  application:
+    name: greet-provider
+  registry:
+    type: nacos
+    address: 127.0.0.1:8848        # 需要本地先启动Nacos（见模块README）
+  protocol:
+    host: 127.0.0.1
+    port: 20880                    # 本进程RPC监听端口
+    serialization: kryo            # provider/consumer 必须一致

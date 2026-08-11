@@ -1,0 +1,13 @@
+# 内置Filter SPI配置（name=实现类全限定名），由ExtensionLoader加载。
+#
+# 框架默认注册4个通用filter；按系统属性-Dconduit.filter.<name>.enabled=<true|false> 控制开关：
+#   accesslog    - 默认开：双侧访问日志（CONDUIT.ACCESS logger）
+#   exception    - 默认开：提供侧异常规整（避免消费侧反序列化失败）
+#   metrics      - 默认关：双侧QPS/RT/错误率累计（-Dconduit.filter.metrics.enabled=true开启）
+#   activelimit  - 默认关：提供侧并发隔离（-Dconduit.filter.activelimit.enabled=true开启；可选 -Dconduit.filter.activelimit.permits=N）
+#
+# 用户可在自己的META-INF/rpc/io.github.nitouge.conduit.common.filter.Filter中追加自定义filter（与内置并存）。
+accesslog=io.github.nitouge.conduit.common.filter.builtin.AccessLogFilter
+exception=io.github.nitouge.conduit.common.filter.builtin.ExceptionFilter
+metrics=io.github.nitouge.conduit.common.filter.builtin.MetricsFilter
+activelimit=io.github.nitouge.conduit.common.filter.builtin.ActiveLimitFilter
