@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.nitouge.conduit</groupId>
+        <groupId>io.github.nitouge</groupId>
         <artifactId>conduit-parent</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
@@ -17,33 +17,33 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-api</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-common</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-remoting</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-registry</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-serialization</artifactId>
         </dependency>
 
         <!-- 客户端把"选节点"(cluster) 与"真正发请求"(remoting) 拼起来，因此依赖cluster。 -->
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-cluster</artifactId>
         </dependency>
 

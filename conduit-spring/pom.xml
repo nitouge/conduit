@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.nitouge.conduit</groupId>
+        <groupId>io.github.nitouge</groupId>
         <artifactId>conduit-parent</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
@@ -18,12 +18,12 @@
     <dependencies>
         <!-- 引入本模块即级联拿到客户端 + 服务端及全部底层模块。 -->
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-client</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-server</artifactId>
         </dependency>
 

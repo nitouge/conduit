@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.nitouge.conduit</groupId>
+        <groupId>io.github.nitouge</groupId>
         <artifactId>conduit-example</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
@@ -19,18 +19,18 @@
     <dependencies>
         <!-- 直连示例直接使用server + client（编程式main/集成测试）。 -->
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-server</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-client</artifactId>
         </dependency>
 
         <!-- Spring整合（@EnableConduit/@RpcService/@RpcReference） -->
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-spring</artifactId>
         </dependency>
 

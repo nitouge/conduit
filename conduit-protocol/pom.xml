@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.nitouge.conduit</groupId>
+        <groupId>io.github.nitouge</groupId>
         <artifactId>conduit-parent</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
@@ -17,18 +17,18 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-api</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-common</artifactId>
         </dependency>
 
         <!-- 编解码器按codec字段选择Serializer序列化body，只依赖Serializer接口。 -->
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-serialization</artifactId>
         </dependency>
 

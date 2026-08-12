@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.nitouge.conduit</groupId>
+        <groupId>io.github.nitouge</groupId>
         <artifactId>conduit-parent</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
@@ -18,7 +18,7 @@
     <!-- 纯依赖聚合（starter约定）：带上自动配置 + Spring Boot运行时，使用者只需依赖这一个。 -->
     <dependencies>
         <dependency>
-            <groupId>io.github.nitouge.conduit</groupId>
+            <groupId>io.github.nitouge</groupId>
             <artifactId>conduit-spring</artifactId>
         </dependency>
 
