@@ -40,12 +40,12 @@ set JAVA_HOME=D:\path\to\jdk-17      # Windows；Linux/Mac: export JAVA_HOME=...
 mvn clean install -DskipTests        # 安装全部模块到本地 ~/.m2
 ```
 
-之后在你的工程里按需引入坐标（`groupId=io.github.nitouge.conduit`，`version=1.0.0-SNAPSHOT`）：
+之后在你的工程里按需引入坐标（`groupId=io.github.nitouge`，`version=1.0.0-SNAPSHOT`）：
 
 ```xml
 <!-- Spring Boot 应用：一个 starter 全搞定（自动装配） -->
 <dependency>
-    <groupId>io.github.nitouge.conduit</groupId>
+    <groupId>io.github.nitouge</groupId>
     <artifactId>conduit-spring-boot-starter</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
@@ -457,7 +457,7 @@ mvn -pl conduit-example/conduit-starter-demo/conduit-starter-demo-provider -am t
 
 ## 14. 模块/依赖速查
 
-| 场景 | 引入坐标（io.github.nitouge.conduit） |
+| 场景 | 引入坐标（io.github.nitouge） |
 |---|---|
 | Spring Boot 应用（推荐，自动装配） | `conduit-spring-boot-starter` |
 | 普通 Spring 应用 | `conduit-spring`（配置类加 `@EnableConduit`） |
