@@ -7,30 +7,42 @@ import io.github.nitouge.conduit.protocol.RpcMessage;
 import io.github.nitouge.conduit.remoting.PendingRequests;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.timeout.IdleState;
-import io.netty.handler.timeout.IdleStateEvent;
-import org.apache.commons.collections4.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
- * 客户端业务Handler：收到响应帧后按requestId唤醒等待中的future；
- * 写空闲时主动发心跳维持长连接活性。
+ * 客户端业务Handler：收到响应帧后按requestId唤醒等待中的future。
+ *
+ * <p>心跳/握手等控制帧在上游处理器已被消费，这里只会收到业务响应；若收到非响应帧说明对端角色错乱
+ * 或协议实现有误，直接断开而不是把错误数据塞给等待中的调用方。</p>
+ *
+ * <p>连接断开时把该连接上所有在途请求统一失败，避免调用方干等到超时、也避免关联表永久泄漏。</p>
  */
 public class NettyClientHandler extends SimpleChannelInboundHandler<RpcMessage> {
 
     private static final Logger log = LoggerFactory.getLogger(NettyClientHandler.class);
 
+    private final LongAdder responsesReceived;
+
+    public NettyClientHandler(LongAdder responsesReceived) {
+        this.responsesReceived = responsesReceived;
+    }
+
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, RpcMessage msg) {
-        if (msg.isHeartbeat()) {
-            log.debug("[NettyClientHandler] 收到心跳响应 from {}", ctx.channel().remoteAddress());
-            return; // 心跳响应，忽略
+        if (!(msg.getPayload() instanceof RpcResponse response)) {
+            log.warn("[NettyClientHandler] 收到非响应帧(type={}, requestId={})，关闭连接: {}",
+                    ProtocolConstants.typeName(msg.getType()), msg.getRequestId(), ctx.channel().remoteAddress());
+            ctx.close();
+            return;
         }
+
+        responsesReceived.increment();
+
         // 响应帧：按协议头requestId关联回对应的future
-        RpcResponse response = (RpcResponse) msg.getPayload();
         Set<Long> inFlight = ctx.channel().attr(NettyClient.IN_FLIGHT).get();
         if (inFlight != null) {
             inFlight.remove(msg.getRequestId());
@@ -42,11 +54,10 @@ public class NettyClientHandler extends SimpleChannelInboundHandler<RpcMessage> 
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        // 连接断开：把这条连接上所有已写出、未收到响应的请求统一失败，
-        // 避免调用方干等到超时、也避免PendingRequests永久泄漏。
         Set<Long> inFlight = ctx.channel().attr(NettyClient.IN_FLIGHT).get();
-        if (CollectionUtils.isNotEmpty(inFlight)) {
-            log.debug("[NettyClientHandler] 连接断开，失败 {} 个在途请求，remote={}", inFlight.size(), ctx.channel().remoteAddress());
+        if (inFlight != null && !inFlight.isEmpty()) {
+            log.debug("[NettyClientHandler] 连接断开，失败 {} 个在途请求，remote={}",
+                    inFlight.size(), ctx.channel().remoteAddress());
             RpcException cause = new RpcException("连接已关闭: " + ctx.channel().remoteAddress());
             for (Long id : inFlight) {
                 PendingRequests.completeExceptionally(id, cause);
@@ -54,15 +65,6 @@ public class NettyClientHandler extends SimpleChannelInboundHandler<RpcMessage> 
             inFlight.clear();
         }
         super.channelInactive(ctx);
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
-        // 写空闲：一段时间没写出数据，发一帧心跳保活
-        if (evt instanceof IdleStateEvent && ((IdleStateEvent) evt).state() == IdleState.WRITER_IDLE) {
-            log.debug("[NettyClientHandler] 写空闲触发，发心跳 to {}", ctx.channel().remoteAddress());
-            ctx.channel().writeAndFlush(RpcMessage.heartbeat(0L, ProtocolConstants.CODEC_JDK));
-        }
     }
 
     @Override

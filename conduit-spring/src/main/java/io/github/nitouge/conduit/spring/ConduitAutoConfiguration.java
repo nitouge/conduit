@@ -35,7 +35,8 @@ public class ConduitAutoConfiguration {
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
     public RpcClient conduitRpcClient(ConduitProperties props) {
-        return new RpcClient(props.getProtocol().getSerialization());
+        // 传输配置（压缩/连接池/心跳/重连/TLS）统一由conduit.*构建，业务代码零感知
+        return new RpcClient(props.toClientOptions());
     }
 
     @Bean

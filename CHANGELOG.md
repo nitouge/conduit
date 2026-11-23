@@ -19,9 +19,30 @@
 - 真正的 Spring Boot Starter（`conduit-spring-boot-starter`）与跨进程 `conduit-starter-demo` 示例。
 - Provider 端非阻塞异步调用支持。
 
+- **基础通信层加固（Protocol + Transport）**：
+  - 协议版本协商：新增 `HANDSHAKE` / `HANDSHAKE_ACK` / `HANDSHAKE_REJECT` 控制帧；版本取双方支持区间的交集最高版（未来版本平滑降级、过旧版本明确拒绝），并在握手同时协商 codec 与压缩能力；握手超时、未握手业务帧拦截。
+  - 数据压缩：`ProtocolOptions` 支持压缩算法与压缩阈值（默认 1024 字节，小报文不压缩），GZIP 走握手能力协商；解压炸弹防护。
+  - 链路加密：新增 `Tls` 工具与 `sslContext` 配置项，服务端/客户端均可启用 TLS（JDK SslProvider），客户端默认开启 HTTPS 主机名校验，支持 PEM 与 keystore。
+  - 连接池：新增 `ConnectionPool`，每地址默认单长连接，可配置多连接；按在途请求数选择连接、单飞建链、后台扩容到上限、闲置回收。
+  - 心跳保活：客户端写空闲发 PING、服务端回 PONG，两端读空闲探活；心跳间隔/读空闲阈值可配置。
+  - 断线自动重连：新增 `ReconnectManager`，指数退避后台重连（成功即停、达上限放弃），并保留按需建链兜底。
+  - 客户端建链/发送改为完全异步，不再阻塞调用线程；请求超时清理改用独立调度线程。
+  - 新增 `ClientOptions` / `ServerOptions` 与 `conduit.transport.*` 配置项。
+
 ### Docs
 
 - 补齐开源基础文档：`LICENSE`（Apache-2.0）、`CONTRIBUTING.md`、`CHANGELOG.md`。
+- 新增 [docs/TRANSPORT.md](docs/TRANSPORT.md)：传输层与协议设计（帧格式、握手、压缩、心跳、连接池、重连、TLS、不变量）。
+
+### Fixed
+
+- `RpcDecoder` 遇到带 body 的心跳帧时未消费 body，会污染后续帧边界。
+- 请求 body 反序列化失败时直接断开连接，客户端只能等到超时；现在回传可序列化的错误响应。
+- 解码器未校验负数/超大 `length` 与业务帧协议版本。
+- 半开连接无法被客户端感知（只有写空闲心跳、无读空闲探活），只能等请求超时。
+- 超时清理任务挂在 EventLoop 上，EventLoop 关闭后无法调度，改为独立调度线程。
+- 客户端 `close()` 未等待连接与线程真正释放。
+- 服务端优雅停机未关闭已接入连接、未等待事件循环终止。
 
 <!--
 后续每次发版前，在此文件顶部新增一个版本块，格式例如：

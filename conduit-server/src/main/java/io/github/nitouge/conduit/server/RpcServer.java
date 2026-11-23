@@ -2,6 +2,7 @@ package io.github.nitouge.conduit.server;
 
 import io.github.nitouge.conduit.api.ServiceMeta;
 import io.github.nitouge.conduit.registry.Registry;
+import io.github.nitouge.conduit.remoting.ServerOptions;
 import io.github.nitouge.conduit.remoting.netty.NettyServer;
 import io.github.nitouge.conduit.server.support.RpcRequestHandler;
 import io.github.nitouge.conduit.server.support.ServiceCache;
@@ -35,16 +36,26 @@ public class RpcServer {
 
     /** 直连模式（M1）：不接入注册中心 */
     public RpcServer(String host, int port) {
-        this(host, port, null);
+        this(host, port, null, ServerOptions.defaults());
+    }
+
+    /** 直连模式 + 自定义传输配置（压缩、TLS、读写空闲等） */
+    public RpcServer(String host, int port, ServerOptions options) {
+        this(host, port, null, options);
     }
 
     /** 注册中心模式（M2）：export时注册到registry */
     public RpcServer(String host, int port, Registry registry) {
+        this(host, port, registry, ServerOptions.defaults());
+    }
+
+    /** 注册中心模式 + 自定义传输配置 */
+    public RpcServer(String host, int port, Registry registry, ServerOptions options) {
         this.host = host;
         this.port = port;
         this.registry = registry;
         // 请求处理器注入传输层，业务与传输解耦
-        this.nettyServer = new NettyServer(host, port, new RpcRequestHandler(serviceCache));
+        this.nettyServer = new NettyServer(host, port, new RpcRequestHandler(serviceCache), options);
     }
 
     /**

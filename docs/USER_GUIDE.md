@@ -270,6 +270,33 @@ client.close();
 | `conduit.protocol.port` | `20880` | 服务端监听端口（消费者可不配） |
 | `conduit.protocol.serialization` | `jdk` | 出站序列化：`jdk`/`json`/`kryo`/`protostuff` |
 
+传输层（握手 / 压缩 / 心跳 / 连接池 / 重连 / TLS）：
+
+| 配置项 | 默认 | 说明 |
+|---|---|---|
+| `conduit.protocol.compress` | `none` | 压缩算法：`none`/`gzip`（达到阈值才真正压缩） |
+| `conduit.protocol.compress-threshold` | `1024` | 压缩阈值（字节），`0` 表示无条件压缩 |
+| `conduit.transport.connect-timeout-ms` | `3000` | TCP 建链超时 |
+| `conduit.transport.handshake-timeout-ms` | `3000` | 协议握手超时 |
+| `conduit.transport.heartbeat-interval-ms` | `30000` | 心跳间隔，`0` 关闭心跳 |
+| `conduit.transport.read-idle-timeout-ms` | `90000` | 客户端读空闲探活（须大于心跳间隔），`0` 关闭 |
+| `conduit.transport.max-connections-per-address` | `1` | 每地址连接数上限（连接池容量） |
+| `conduit.transport.idle-connection-timeout-ms` | `600000` | 闲置连接回收时长 |
+| `conduit.transport.reconnect.enabled` | `true` | 断线是否后台自动重连 |
+| `conduit.transport.reconnect.max-attempts` | `5` | 重连最大尝试次数 |
+| `conduit.transport.reconnect.base-delay-ms` | `1000` | 首次退避时长（后按指数增长） |
+| `conduit.transport.reconnect.max-delay-ms` | `30000` | 最大退避时长 |
+| `conduit.transport.server.business-threads` | `200` | 服务端业务线程数 |
+| `conduit.transport.server.queue-capacity` | `10000` | 服务端业务队列容量 |
+| `conduit.transport.server.reader-idle-timeout-ms` | `60000` | 服务端读空闲清理 |
+| `conduit.transport.server.shutdown-timeout-ms` | `10000` | 优雅停机等待时长 |
+| `conduit.transport.tls.enabled` | `false` | 是否启用 TLS 链路加密 |
+| `conduit.transport.tls.cert` / `key` | - | 服务端证书链/私钥（PEM，支持 `classpath:`） |
+| `conduit.transport.tls.trust-cert` | - | 客户端信任的 CA/证书 PEM；留空用 JVM 默认信任库 |
+| `conduit.transport.tls.insecure` | `false` | 客户端跳过证书校验（仅测试环境） |
+
+> 传输层设计细节（握手时序、压缩策略、心跳语义、连接池与重连规则、TLS）见 [TRANSPORT.md](TRANSPORT.md)。
+
 `@RpcReference` 字段级配置（覆盖默认）：
 
 | 属性 | 默认 | 说明 |

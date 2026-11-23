@@ -236,6 +236,12 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven-surefire-plugin.version}</version>
+                    <configuration>
+                        <!-- Mockito inline mock maker 通过动态 attach 注入 agent；JDK 9+ 默认禁止
+                             self-attach，会导致 Spring Boot 测试初始化 Mockito 失败。
+                             这里仅对测试 JVM 放开，不影响生产运行时。 -->
+                        <argLine>-Djdk.attach.allowAttachSelf=true</argLine>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>

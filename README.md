@@ -16,6 +16,7 @@ Conduit 是一个基于 Java 17 + Netty 实现的轻量级 RPC 框架，目标�
     - **负载均衡**：Random / RoundRobin / ConsistentHash
     - **集群容错**：FailFast / FailOver / FailSafe / FailBack
 - **📦 自定义协议**：定长消息头 + 变长 Body，彻底解决拆包粘包问题
+- **🛡️ 可靠传输**：协议版本协商（握手 + 能力协商）、GZIP 压缩、TLS 链路加密、连接池、心跳保活、断线自动重连
 - **⚙️ 自研 SPI 机制**：`@SPI` + `ExtensionLoader`，按名加载 + 单例缓存
 - **🔄 同步/异步双模**：基于 `CompletableFuture` 的请求响应关联
 - **🛡️ 三态熔断器**：Closed / Open / HalfOpen 自动状态流转
@@ -94,7 +95,7 @@ Conduit/
 | **conduit-protocol** | 协议常量、消息头、编解码器 `RpcEncoder` / `RpcDecoder`。 |
 | **conduit-serialization** | `Serializer` 接口（`@SPI`）+ `JdkSerializer` / `JsonSerializer` / `KryoSerializer` / `ProtostuffSerializer`。 |
 | **conduit-registry** | `Registry` 接口（`@SPI`）+ `NotifyListener` + `NacosRegistry` / `InMemoryRegistry`；可继续扩展其他注册中心。 |
-| **conduit-remoting** | `NettyServer` / `NettyClient`、`ChannelHandler`、连接管理、心跳，以及 requestId → `CompletableFuture` 关联表。 |
+| **conduit-remoting** | `NettyServer` / `NettyClient`、协议握手（版本/codec/压缩能力协商）、连接池、心跳保活、断线重连、TLS，以及 requestId → `CompletableFuture` 关联表。 |
 | **conduit-server** | 服务暴露、`@RpcService` 扫描、服务缓存 `Map<String,Object>`、反射分发、向注册中心 `register`。 |
 | **conduit-client** | JDK 动态代理、`RpcClient`、同步/异步发起调用，整合发现 + 集群 + 负载均衡 + 序列化。 |
 | **conduit-cluster** | `LoadBalancer`（`@SPI`）、`Cluster`（`@SPI`）、`CircuitBreaker`。 |
@@ -144,6 +145,11 @@ conduit.registry.type: local
 | `conduit.cluster.loadbalance` | 负载均衡策略 | `random`(默认) / `roundrobin` / `consistenthash` |
 | `conduit.cluster.strategy` | 集群容错策略 | `failover`(默认) / `failfast` / `failsafe` / `failback` |
 | `conduit.protocol.serialization` | 序列化方式 | `jdk` / `json` / `kryo`(生产推荐) / `protostuff` |
+| `conduit.protocol.compress` | 压缩算法（达到阈值才真正压缩） | `none`(默认) / `gzip` |
+| `conduit.transport.max-connections-per-address` | 每地址连接数上限（连接池） | 默认 `1`（单长连接复用） |
+| `conduit.transport.heartbeat-interval-ms` | 心跳间隔，`0` 关闭 | 默认 `30000` |
+| `conduit.transport.reconnect.enabled` | 断线后台自动重连 | 默认 `true` |
+| `conduit.transport.tls.enabled` | 链路加密（TLS） | 默认 `false` |
 | `conduit.registry.type` | 注册中心类型 | `nacos`(默认) / `local` |
 | `conduit.protocol.weight` | 服务节点权重 | 默认 `100` |
 
@@ -158,6 +164,7 @@ conduit.registry.type: local
 | **M3** | ✅ | SPI（`ExtensionLoader`）+ Kryo / JSON / Protostuff，序列化可替换落地。 |
 | **M4** | ✅ | 异步（`CompletableFuture`）+ 负载均衡（Random/RoundRobin/ConsistentHash）+ 集群容错（FailFast/Over/Safe/Back）+ 熔断。 |
 | **M5** | ✅ | Spring 集成 + 注解驱动（`@EnableConduit`/`@RpcService`/`@RpcReference`）+ `application.yml` 自动配置。 |
+| **传输层加固** | ✅ | 协议版本协商、数据压缩、TLS、连接池、心跳保活、断线自动重连；底层通信稳定可靠（见 [TRANSPORT.md](docs/TRANSPORT.md)）。 |
 
 > 构建需 **JDK 17**（Spring Boot 3.x 要求）：`set JAVA_HOME=<jdk17>` 后 `mvn clean test`
 
@@ -168,6 +175,7 @@ conduit.registry.type: local
 | 文档 | 内容 |
 | --- | --- |
 | [USER_GUIDE.md](docs/USER_GUIDE.md) | **使用手册**：引入坐标、三种用法、配置项、序列化/容错/异步 |
+| [TRANSPORT.md](docs/TRANSPORT.md) | **传输层与协议**：帧格式、版本协商、压缩、心跳、连接池、断线重连、TLS、不变量 |
 | [FLOWCHARTS.md](docs/FLOWCHARTS.md) | **全局流程与流转图**：端到端时序、决策层、协议帧、SPI、注册发现、熔断状态机、线程模型、Spring 启停|
 | [ARCHITECTURE.md](temp/ARCHITECTURE.md) | 整体架构、模块分层、调用链路 |
 | [PROTOCOL.md](docs/PROTOCOL.md) | 自定义协议、消息头逐字段、拆包粘包 |

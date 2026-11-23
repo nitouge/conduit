@@ -15,3 +15,16 @@ conduit:
     address: 127.0.0.1:8848        # 与provider指向同一个Nacos
   protocol:
     serialization: kryo            # 必须与provider一致，否则反序列化失败
+    compress: gzip                 # 必须与provider一致；大报文才真正压缩
+    compress-threshold: 1024
+  transport:
+    heartbeat-interval-ms: 30000   # 写空闲30s发一次PING，配合读空闲探活
+    reconnect:                     # 断线后指数退避后台重连
+      enabled: true
+      max-attempts: 5
+      base-delay-ms: 1000
+      max-delay-ms: 30000
+    # 链路加密（可选）：消费端只需信任provider证书；自签证书联调可临时 insecure: true
+    # tls:
+    #   enabled: true
+    #   trust-cert: classpath:ca.crt

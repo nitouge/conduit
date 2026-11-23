@@ -45,7 +45,8 @@ public class ServiceExporter implements SmartInitializingSingleton, DisposableBe
         if (MapUtils.isEmpty(services)) {
             return; // 纯消费者应用：无需启动服务端
         }
-        server = new RpcServer(props.getProtocol().getHost(), props.getProtocol().getPort(), registry);
+        server = new RpcServer(props.getProtocol().getHost(), props.getProtocol().getPort(), registry,
+                props.toServerOptions());
         for (Object bean : services.values()) {
             int exported = 0;
             // 用ClassUtils.getUserClass还原CGLIB代理（如被@Transactional/@Async增强）的原始类，

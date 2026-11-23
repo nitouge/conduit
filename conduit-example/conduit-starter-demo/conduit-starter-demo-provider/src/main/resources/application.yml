@@ -14,3 +14,14 @@ conduit:
     host: 127.0.0.1
     port: 20880                    # 本进程RPC监听端口
     serialization: kryo            # provider/consumer 必须一致
+    compress: gzip                 # 两端保持一致：客户端提议，服务端协商接受
+    compress-threshold: 1024       # body达到1KB才压缩，小报文不浪费CPU
+  transport:
+    server:
+      reader-idle-timeout-ms: 45000  # 示例值：45s内收不到任何帧则断开失联连接
+    # 链路加密（可选）：两端都打开并放入证书；provider需要cert/key，consumer需要trust-cert
+    # tls:
+    #   enabled: true
+    #   cert: classpath:server.crt
+    #   key: classpath:server.key
+    #   trust-cert: classpath:ca.crt

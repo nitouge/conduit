@@ -19,6 +19,11 @@ public final class Compressor {
     private Compressor() {
     }
 
+    /** 本端点是否支持该压缩算法（用于握手能力协商与解码校验） */
+    public static boolean isSupported(byte type) {
+        return type == ProtocolConstants.COMPRESS_NONE || type == ProtocolConstants.COMPRESS_GZIP;
+    }
+
     public static byte[] compress(byte type, byte[] data) {
         return switch (type) {
             case ProtocolConstants.COMPRESS_NONE -> data;

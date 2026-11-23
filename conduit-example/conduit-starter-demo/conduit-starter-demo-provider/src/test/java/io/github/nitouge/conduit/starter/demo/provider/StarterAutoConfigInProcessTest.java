@@ -2,7 +2,12 @@ package io.github.nitouge.conduit.starter.demo.provider;
 
 import io.github.nitouge.conduit.api.annotation.RpcReference;
 import io.github.nitouge.conduit.api.annotation.RpcService;
+import io.github.nitouge.conduit.client.RpcClient;
+import io.github.nitouge.conduit.protocol.ProtocolConstants;
 import io.github.nitouge.conduit.registry.Registry;
+import io.github.nitouge.conduit.remoting.ClientOptions;
+import io.github.nitouge.conduit.remoting.ServerOptions;
+import io.github.nitouge.conduit.spring.ConduitProperties;
 import io.github.nitouge.conduit.starter.demo.api.GreetService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * 证明只引入starter（无 {@code @EnableConduit}）即把 {@code @RpcService} 自动暴露、
  * {@code @RpcReference} 自动注入，并走真实Netty完成一次调用。
  *
+ * <p>同时验证本模块 {@code application.yml} 中的 {@code conduit.protocol} /
+ * {@code conduit.transport} 配置确实绑进了 {@link ClientOptions}/{@link ServerOptions}，
+ * 避免"属性名写错但静默用默认值"。</p>
+ *
  * <p>这条用例进CI跑（不依赖外部组件）；两个真实进程经Nacos的联调见模块README，用curl验证。</p>
  */
 @SpringBootTest(
@@ -27,8 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
                 "conduit.registry.type=local",
                 "conduit.registry.address=provider-inproc-jvm",
                 "conduit.protocol.host=127.0.0.1",
-                "conduit.protocol.port=20899",
-                "conduit.protocol.serialization=kryo"
+                "conduit.protocol.port=20899"
         })
 class StarterAutoConfigInProcessTest {
 
@@ -37,6 +45,12 @@ class StarterAutoConfigInProcessTest {
 
     @Autowired
     private Registry registry;
+
+    @Autowired
+    private RpcClient rpcClient;
+
+    @Autowired
+    private ConduitProperties properties;
 
     @Test
     void autoConfiguredWithoutEnableConduit() {
@@ -47,6 +61,26 @@ class StarterAutoConfigInProcessTest {
     void serviceIsExportedThroughAutoConfiguredRegistry() {
         assertEquals(1, registry.discover(GreetService.class.getName()).size(),
                 "业务接口应已由starter自动注册");
+    }
+
+    @Test
+    void transportConfigFromApplicationYmlIsApplied() {
+        ClientOptions clientOptions = rpcClient.nettyClient().getOptions();
+        // application.yml: protocol.serialization/compress/compress-threshold
+        assertEquals(ProtocolConstants.CODEC_KRYO, clientOptions.getCodec());
+        assertEquals(ProtocolConstants.COMPRESS_GZIP, clientOptions.getCompress());
+        assertEquals(1024, clientOptions.getCompressThreshold());
+
+        // application.yml: transport.server.reader-idle-timeout-ms
+        ServerOptions serverOptions = properties.toServerOptions();
+        assertEquals(45_000, serverOptions.getReaderIdleTimeoutMillis());
+    }
+
+    @Test
+    void largePayloadCallUsesConfiguredCompression() {
+        // 超过 compress-threshold(1KB)：请求与响应都会走GZIP压缩/解压路径
+        String payload = "payload-".repeat(1024);
+        assertEquals("Hi, " + payload + "!", caller.call(payload));
     }
 
     /** 注意：用@SpringBootConfiguration + @EnableAutoConfiguration触发starter自动装配，且不扫描生产包。 */
