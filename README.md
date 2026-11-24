@@ -17,7 +17,8 @@ Conduit 是一个基于 Java 17 + Netty 实现的轻量级 RPC 框架，目标�
     - **集群容错**：FailFast / FailOver / FailSafe / FailBack
 - **📦 自定义协议**：定长消息头 + 变长 Body，彻底解决拆包粘包问题
 - **🛡️ 可靠传输**：协议版本协商（握手 + 能力协商）、GZIP 压缩、TLS 链路加密、连接池、心跳保活、断线自动重连
-- **⚙️ 自研 SPI 机制**：`@SPI` + `ExtensionLoader`，按名加载 + 单例缓存
+- **⚙️ 自研 SPI 机制**：`@SPI` + `ExtensionLoader`，按名加载 + 单例缓存 + `@Adaptive` 自适应选择 + `Lifecycle` 生命周期
+- **🧩 可配置集群治理**：重试次数/退避与熔断阈值可配；支持 `@RpcReference` 字段级与 `RpcContext` 单次调用覆盖
 - **🔄 同步/异步双模**：基于 `CompletableFuture` 的请求响应关联
 - **🛡️ 三态熔断器**：Closed / Open / HalfOpen 自动状态流转
 - **🌱 Spring 深度整合**：`@EnableConduit` / `@RpcService` / `@RpcReference`
@@ -142,6 +143,9 @@ conduit.registry.type: local
 | --- | --- | --- |
 | `conduit.protocol.timeout` | 调用超时（毫秒） | 默认 `3000` |
 | `conduit.cluster.retries` | 失败重试次数（FailOver 生效） | 默认 `2` |
+| `conduit.cluster.retry-backoff-ms` | 两次重试之间的异步退避 | 默认 `0` |
+| `conduit.cluster.breaker.failure-threshold` | 连续失败多少次打开熔断 | 默认 `5` |
+| `conduit.cluster.breaker.open-duration-ms` | 熔断打开后转半开的时长 | 默认 `5000` |
 | `conduit.cluster.loadbalance` | 负载均衡策略 | `random`(默认) / `roundrobin` / `consistenthash` |
 | `conduit.cluster.strategy` | 集群容错策略 | `failover`(默认) / `failfast` / `failsafe` / `failback` |
 | `conduit.protocol.serialization` | 序列化方式 | `jdk` / `json` / `kryo`(生产推荐) / `protostuff` |

@@ -3,6 +3,7 @@ package io.github.nitouge.conduit.spring;
 import io.github.nitouge.conduit.api.annotation.RpcReference;
 import io.github.nitouge.conduit.client.RpcClient;
 import io.github.nitouge.conduit.client.proxy.RpcClientProxy;
+import io.github.nitouge.conduit.cluster.ClusterOptions;
 import io.github.nitouge.conduit.common.exception.RpcException;
 import io.github.nitouge.conduit.registry.Registry;
 import org.springframework.beans.BeansException;
@@ -23,15 +24,19 @@ public class ReferenceAnnotationBeanPostProcessor implements BeanPostProcessor {
 
     private final ObjectProvider<Registry> registryProvider;
     private final ObjectProvider<RpcClient> clientProvider;
+    private final ObjectProvider<ConduitProperties> propertiesProvider;
 
     // 延迟解析后缓存（Bean后处理发生在容器刷新的单线程阶段，volatile足以保证可见性）
     private volatile Registry registry;
     private volatile RpcClient client;
+    private volatile ConduitProperties properties;
 
     public ReferenceAnnotationBeanPostProcessor(ObjectProvider<Registry> registryProvider,
-                                                ObjectProvider<RpcClient> clientProvider) {
+                                                ObjectProvider<RpcClient> clientProvider,
+                                                ObjectProvider<ConduitProperties> propertiesProvider) {
         this.registryProvider = registryProvider;
         this.clientProvider = clientProvider;
+        this.propertiesProvider = propertiesProvider;
     }
 
     @Override
@@ -54,7 +59,8 @@ public class ReferenceAnnotationBeanPostProcessor implements BeanPostProcessor {
                         client(),
                         ref.timeout(),
                         ref.cluster().getType(),
-                        ref.loadbalance().getType()
+                        ref.loadbalance().getType(),
+                        clusterOptions(ref)
                 );
                 field.setAccessible(true);
                 try {
@@ -67,7 +73,9 @@ public class ReferenceAnnotationBeanPostProcessor implements BeanPostProcessor {
         return bean;
     }
 
-    /** 首次用到时才从容器取Registry（getObject返回同一单例，竞态下重复赋值无害） */
+    /**
+     * 首次用到时才从容器取Registry（getObject返回同一单例，竞态下重复赋值无害）
+     */
     private Registry registry() {
         Registry r = this.registry;
         if (r == null) {
@@ -76,12 +84,37 @@ public class ReferenceAnnotationBeanPostProcessor implements BeanPostProcessor {
         return r;
     }
 
-    /** 首次用到时才从容器取RpcClient */
+    /**
+     * 首次用到时才从容器取RpcClient
+     */
     private RpcClient client() {
         RpcClient c = this.client;
         if (c == null) {
             c = this.client = clientProvider.getObject();
         }
         return c;
+    }
+
+    /**
+     * 字段级重试配置覆盖全局配置（注解-1表示沿用全局）
+     */
+    private ClusterOptions clusterOptions(RpcReference ref) {
+        ClusterOptions global = properties().toClusterOptions();
+        return global.toBuilder()
+                .retries(ref.retries() >= 0 ? ref.retries() : global.getRetries())
+                .retryBackoffMs(ref.retryBackoffMs() >= 0
+                        ? ref.retryBackoffMs() : global.getRetryBackoffMs())
+                .build();
+    }
+
+    /**
+     * 首次用到时才从容器取ConduitProperties
+     */
+    private ConduitProperties properties() {
+        ConduitProperties p = this.properties;
+        if (p == null) {
+            p = this.properties = propertiesProvider.getObject();
+        }
+        return p;
     }
 }

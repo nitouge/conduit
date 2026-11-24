@@ -34,4 +34,18 @@ public @interface RpcReference {
     /** 负载均衡策略：random/roundrobin/consistenthash */
     LoadbalancePolicyEnum loadbalance() default LoadbalancePolicyEnum.RANDOM;
 
+    /**
+     * 额外重试次数（不含首次调用，仅failover生效）。
+     *
+     * <p>{@code -1} 表示使用全局配置 {@code conduit.cluster.retries}（默认2）。</p>
+     */
+    int retries() default -1;
+
+    /**
+     * 重试退避时长（毫秒，仅failover生效）。
+     *
+     * <p>{@code -1} 表示使用全局配置 {@code conduit.cluster.retry-backoff-ms}（默认0，立即重试）。</p>
+     */
+    long retryBackoffMs() default -1;
+
 }

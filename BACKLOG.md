@@ -28,14 +28,14 @@
 
 ## 3. SPI
 
-- [ ] 自适应扩展加载 `M`
-- [ ] 组件生命周期管理 `M`
+- [x] 自适应扩展加载 `M` — `@Adaptive` + `getAdaptiveExtension()` 代理：按 Map/`RpcRequest.attachments` 的 key 每次调用动态选实现，未取到回退默认；Cluster/LoadBalancer 已接入，可用 `RpcContext` 的 `cluster`/`loadbalance` attachment 单次覆盖
+- [x] 组件生命周期管理 `M` — `Lifecycle`（init/destroy）+ ExtensionLoader 自动初始化/销毁、`destroyExtension/destroyAll/shutdownAll` 与 JVM 关闭钩子
 
 ## 4. Cluster
 
-- [ ] 故障自动转移 `M`
-- [ ] 重试策略配置 `S`
-- [ ] 熔断器机制 `L`
+- [x] 故障自动转移 `M` — Failover 失败自动切换其它节点、熔断节点快速跳过（不消耗重试预算），重试/退避按调用配置
+- [x] 重试策略配置 `S` — `@RpcReference(retries/retryBackoffMs)` + `conduit.cluster.retries/retry-backoff-ms` 全局配置；`ClusterOptions` 随调用传入
+- [x] 熔断器机制 `L` — 节点级三态熔断 + `CircuitBreakerOptions`（阈值/打开时长）可配置 + 注册表 `state/reset/configure`
 
 ## 5. Registry
 

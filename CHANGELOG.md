@@ -29,10 +29,19 @@
   - 客户端建链/发送改为完全异步，不再阻塞调用线程；请求超时清理改用独立调度线程。
   - 新增 `ClientOptions` / `ServerOptions` 与 `conduit.transport.*` 配置项。
 
+- **核心扩展机制（SPI + Cluster）**：
+  - SPI 自适应扩展：新增 `@Adaptive` 与 `ExtensionLoader.getAdaptiveExtension()`，按 `Map` / `RpcRequest.attachments` 的 key 在每次调用时动态选择实现，未取到回退默认；
+  - SPI 生命周期：新增 `Lifecycle`（init/destroy），ExtensionLoader 创建后自动 init，`destroyExtension/destroyAll/shutdownAll` 与 JVM 关闭钩子统一释放；
+  - 集群可配置重试：新增 `ClusterOptions`（重试次数/退避/熔断参数），`@RpcReference(retries, retryBackoffMs)` 与 `conduit.cluster.*` 全局配置；FailOver 支持异步退避、熔断节点跳过不消耗预算；
+  - 熔断器可配置：新增 `CircuitBreakerOptions` 与 `CircuitBreakerRegistry.configure/state/reset`；
+  - Cluster/LoadBalancer 经自适应代理支持单次调用覆盖（`RpcContext` 的 `cluster` / `loadbalance` attachment）。
+
 ### Docs
 
 - 补齐开源基础文档：`LICENSE`（Apache-2.0）、`CONTRIBUTING.md`、`CHANGELOG.md`。
 - 新增 [docs/TRANSPORT.md](docs/TRANSPORT.md)：传输层与协议设计（帧格式、握手、压缩、心跳、连接池、重连、TLS、不变量）。
+- 新增 [docs/SPI.md](docs/SPI.md)：命名扩展、自适应加载、生命周期与扩展点清单。
+- 新增 [docs/CLUSTER.md](docs/CLUSTER.md)：负载均衡、容错、重试配置与熔断器机制。
 
 ### Fixed
 

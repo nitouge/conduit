@@ -1,6 +1,7 @@
 package io.github.nitouge.conduit.spring;
 
 import io.github.nitouge.conduit.client.RpcClient;
+import io.github.nitouge.conduit.cluster.breaker.CircuitBreakerRegistry;
 import io.github.nitouge.conduit.registry.Registries;
 import io.github.nitouge.conduit.registry.Registry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -36,6 +37,8 @@ public class ConduitAutoConfiguration {
     @ConditionalOnMissingBean
     public RpcClient conduitRpcClient(ConduitProperties props) {
         // 传输配置（压缩/连接池/心跳/重连/TLS）统一由conduit.*构建，业务代码零感知
+        // 熔断器是进程内节点级全局状态，启动时按conduit.cluster.breaker.*应用一次
+        CircuitBreakerRegistry.configure(props.toClusterOptions().getCircuitBreaker());
         return new RpcClient(props.toClientOptions());
     }
 
@@ -48,10 +51,11 @@ public class ConduitAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     static ReferenceAnnotationBeanPostProcessor conduitReferenceProcessor(ObjectProvider<Registry> registryProvider,
-                                                                          ObjectProvider<RpcClient> clientProvider) {
+                                                                          ObjectProvider<RpcClient> clientProvider,
+                                                                          ObjectProvider<ConduitProperties> propertiesProvider) {
         // 必须static：BeanPostProcessor的@Bean工厂方法若非static，会强制本配置类（及其依赖
         // ConduitProperties/Registry/RpcClient）过早实例化、绕过部分后处理。配合ObjectProvider延迟取值，
-        // 让Registry/RpcClient在正常阶段才创建。
-        return new ReferenceAnnotationBeanPostProcessor(registryProvider, clientProvider);
+        // 让Registry/RpcClient/ConduitProperties在正常阶段才创建。
+        return new ReferenceAnnotationBeanPostProcessor(registryProvider, clientProvider, propertiesProvider);
     }
 }

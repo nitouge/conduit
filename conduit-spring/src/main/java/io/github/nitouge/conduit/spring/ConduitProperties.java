@@ -1,5 +1,7 @@
 package io.github.nitouge.conduit.spring;
 
+import io.github.nitouge.conduit.cluster.CircuitBreakerOptions;
+import io.github.nitouge.conduit.cluster.ClusterOptions;
 import io.github.nitouge.conduit.protocol.ProtocolConstants;
 import io.github.nitouge.conduit.remoting.ClientOptions;
 import io.github.nitouge.conduit.remoting.ServerOptions;
@@ -49,11 +51,17 @@ import java.io.InputStream;
  *       shutdown-timeout-ms: 10000
  *     tls:
  *       enabled: false
- *       cert: ""             # 服务端证书链PEM（支持 classpath:/path）
+ *       cert: ""             # 服务端证书链PEM（支持classpath:/path）
  *       key: ""              # 服务端私钥PEM
  *       key-password: ""
  *       trust-cert: ""       # 客户端信任的CA/证书PEM；留空用JVM默认信任库
  *       insecure: false      # 客户端跳过证书校验（仅测试）
+ *   cluster:
+ *     retries: 2             # failover额外重试次数（总尝试=retries+1）
+ *     retry-backoff-ms: 0    # 重试退避
+ *     breaker:
+ *       failure-threshold: 5 # 连续失败多少次熔断
+ *       open-duration-ms: 5000
  * </pre>
  */
 @ConfigurationProperties(prefix = "conduit")
@@ -66,6 +74,7 @@ public class ConduitProperties {
     private final RegistryConfig registry = new RegistryConfig();
     private final ProtocolConfig protocol = new ProtocolConfig();
     private final TransportConfig transport = new TransportConfig();
+    private final ClusterConfig cluster = new ClusterConfig();
 
     public boolean isEnabled() {
         return enabled;
@@ -89,6 +98,10 @@ public class ConduitProperties {
 
     public TransportConfig getTransport() {
         return transport;
+    }
+
+    public ClusterConfig getCluster() {
+        return cluster;
     }
 
     // ---------------------------------------------------------------- 构建传输选项
@@ -133,6 +146,18 @@ public class ConduitProperties {
             builder.sslContext(sslContext);
         }
         return builder.build();
+    }
+
+    /** 依据 {@code conduit.cluster.*} 构建重试/退避/熔断配置 */
+    public ClusterOptions toClusterOptions() {
+        return ClusterOptions.builder()
+                .retries(cluster.getRetries())
+                .retryBackoffMs(cluster.getRetryBackoffMs())
+                .circuitBreaker(CircuitBreakerOptions.builder()
+                        .failureThreshold(cluster.getBreaker().getFailureThreshold())
+                        .openDurationMs(cluster.getBreaker().getOpenDurationMs())
+                        .build())
+                .build();
     }
 
     private SslContext buildClientSslContext() {
@@ -422,6 +447,55 @@ public class ConduitProperties {
 
         public void setShutdownTimeoutMs(long shutdownTimeoutMs) {
             this.shutdownTimeoutMs = shutdownTimeoutMs;
+        }
+    }
+
+    /** 集群容错配置：重试次数、退避与熔断器参数 */
+    public static class ClusterConfig {
+        private int retries = ClusterOptions.DEFAULT_RETRIES;
+        private long retryBackoffMs = ClusterOptions.DEFAULT_RETRY_BACKOFF_MS;
+        private final BreakerConfig breaker = new BreakerConfig();
+
+        public int getRetries() {
+            return retries;
+        }
+
+        public void setRetries(int retries) {
+            this.retries = retries;
+        }
+
+        public long getRetryBackoffMs() {
+            return retryBackoffMs;
+        }
+
+        public void setRetryBackoffMs(long retryBackoffMs) {
+            this.retryBackoffMs = retryBackoffMs;
+        }
+
+        public BreakerConfig getBreaker() {
+            return breaker;
+        }
+    }
+
+    /** 熔断器配置 */
+    public static class BreakerConfig {
+        private int failureThreshold = CircuitBreakerOptions.DEFAULT_FAILURE_THRESHOLD;
+        private long openDurationMs = CircuitBreakerOptions.DEFAULT_OPEN_DURATION_MS;
+
+        public int getFailureThreshold() {
+            return failureThreshold;
+        }
+
+        public void setFailureThreshold(int failureThreshold) {
+            this.failureThreshold = failureThreshold;
+        }
+
+        public long getOpenDurationMs() {
+            return openDurationMs;
+        }
+
+        public void setOpenDurationMs(long openDurationMs) {
+            this.openDurationMs = openDurationMs;
         }
     }
 

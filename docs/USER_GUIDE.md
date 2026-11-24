@@ -297,6 +297,17 @@ client.close();
 
 > 传输层设计细节（握手时序、压缩策略、心跳语义、连接池与重连规则、TLS）见 [TRANSPORT.md](TRANSPORT.md)。
 
+集群容错（`conduit.cluster.*`）：
+
+| 配置项 | 默认 | 说明 |
+|---|---|---|
+| `conduit.cluster.retries` | `2` | failover 额外重试次数（总尝试 = retries + 1） |
+| `conduit.cluster.retry-backoff-ms` | `0` | 两次重试之间的异步退避（毫秒） |
+| `conduit.cluster.breaker.failure-threshold` | `5` | 节点连续失败多少次打开熔断 |
+| `conduit.cluster.breaker.open-duration-ms` | `5000` | 打开后多久转半开探测 |
+
+> 自适应扩展与生命周期见 [SPI.md](SPI.md)；集群容错与熔断细节见 [CLUSTER.md](CLUSTER.md)。
+
 `@RpcReference` 字段级配置（覆盖默认）：
 
 | 属性 | 默认 | 说明 |
@@ -304,6 +315,8 @@ client.close();
 | `timeout` | `3000` | 单次调用超时（ms） |
 | `cluster` | `failover` | 容错：`failover`/`failfast`/`failsafe`/`failback` |
 | `loadbalance` | `random` | 负载均衡：`random`/`roundrobin`/`consistenthash` |
+| `retries` | `-1` | failover 额外重试次数；`-1` 表示用全局 `conduit.cluster.retries` |
+| `retryBackoffMs` | `-1` | 重试退避（ms）；`-1` 表示用全局 `conduit.cluster.retry-backoff-ms` |
 | `version` / `group` | `""` | 当前**声明但未参与路由**（serviceName 仅用接口名） |
 
 `@RpcService`：`weight`（默认 100，用于带权负载均衡）、`version`/`group`（同上，暂未生效）。
@@ -335,11 +348,15 @@ conduit:
 
 - **负载均衡**（`loadbalance`）：`random`（加权随机，默认）、`roundrobin`（轮询）、`consistenthash`（相同参数稳定路由到同一节点）。
 - **集群容错**（`cluster`）：
-  - `failover`（默认）：失败自动重试其它节点（最多 `retries+1`=3 次，避开已试节点）。**仅适合幂等方法**。
+  - `failover`（默认）：失败自动重试其它节点，最多 `retries+1` 次（retries 可配，默认2）；避开已试节点，熔断节点零成本跳过。**仅适合幂等方法**。
   - `failfast`：失败立即抛，不重试。**写操作建议用它**。
   - `failsafe`：失败忽略、返回空（注意基本类型返回值见 BACKLOG H6）。
   - `failback`：失败先返回空 + 后台重试。
-- **熔断**：自动按节点（host:port）熔断——连续失败达阈值打开、隔离一段时间后半开放一个探测、成功则恢复。坏节点会被 failover 自然避开。
+- **重试配置**：全局 `conduit.cluster.retries` / `retry-backoff-ms`，或字段级
+  `@RpcReference(retries=..., retryBackoffMs=...)`（`-1` 表示沿用全局）。
+- **单次覆盖**：调用前设置 `RpcContext.getContext().setAttachment("cluster", "failfast")`
+  或 `"loadbalance"`，只影响本次调用（经 SPI 自适应代理生效）。
+- **熔断**：自动按节点（host:port）熔断——连续失败达阈值打开、隔离一段时间后半开放一个探测、成功则恢复。坏节点会被 failover 自然避开；阈值/时长可配（见上表）。
 
 示例：写操作用 failfast、读操作用 failover + roundrobin：
 

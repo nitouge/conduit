@@ -6,6 +6,7 @@ import io.github.nitouge.conduit.api.RpcResponse;
 import io.github.nitouge.conduit.api.ServiceMeta;
 import io.github.nitouge.conduit.client.RpcClient;
 import io.github.nitouge.conduit.cluster.Cluster;
+import io.github.nitouge.conduit.cluster.ClusterOptions;
 import io.github.nitouge.conduit.cluster.LoadBalancer;
 import io.github.nitouge.conduit.cluster.RemoteInvoker;
 import io.github.nitouge.conduit.common.exception.RpcException;
@@ -75,11 +76,20 @@ public class RpcInvocationHandler implements InvocationHandler {
     private final Cluster cluster;
     private final LoadBalancer loadBalancer;
 
+    /** 重试/退避/熔断参数（来自@RpcReference与全局conduit.cluster.*） */
+    private final ClusterOptions clusterOptions;
+
     /** 消费侧filter链（按order排序、已过滤CONSUMER侧）；无filter时为空列表 */
     private final List<Filter> consumerFilters;
 
-    /** M1直连构造 */
+    /** M1直连构造（默认集群参数；直连模式不使用Cluster，参数仅保留一致性） */
     public RpcInvocationHandler(Class<?> interfaceClass, ServiceMeta target, RpcClient client, long timeoutMillis) {
+        this(interfaceClass, target, client, timeoutMillis, ClusterOptions.defaults());
+    }
+
+    /** M1直连构造 + 自定义集群参数 */
+    public RpcInvocationHandler(Class<?> interfaceClass, ServiceMeta target, RpcClient client,
+                                long timeoutMillis, ClusterOptions clusterOptions) {
         this.interfaceClass = interfaceClass;
         this.directTarget = target;
         this.registry = null;
@@ -87,25 +97,38 @@ public class RpcInvocationHandler implements InvocationHandler {
         this.loadBalancer = null;
         this.client = client;
         this.timeoutMillis = timeoutMillis;
+        this.clusterOptions = (clusterOptions == null) ? ClusterOptions.defaults() : clusterOptions;
         this.consumerFilters = FilterLoader.load(Side.CONSUMER);
     }
 
     /** 注册中心构造（默认failover + random） */
     public RpcInvocationHandler(Class<?> interfaceClass, Registry registry, RpcClient client, long timeoutMillis) {
-        this(interfaceClass, registry, client, timeoutMillis, "failover", "random");
+        this(interfaceClass, registry, client, timeoutMillis, "failover", "random", ClusterOptions.defaults());
     }
 
     /** 注册中心构造（指定集群容错策略 + 负载均衡策略） */
     public RpcInvocationHandler(Class<?> interfaceClass, Registry registry,
                                 RpcClient client, long timeoutMillis,
                                 String clusterName, String loadBalanceName) {
+        this(interfaceClass, registry, client, timeoutMillis, clusterName, loadBalanceName,
+                ClusterOptions.defaults());
+    }
+
+    /** 注册中心构造（指定策略 + 重试/退避/熔断参数） */
+    public RpcInvocationHandler(Class<?> interfaceClass, Registry registry,
+                                RpcClient client, long timeoutMillis,
+                                String clusterName, String loadBalanceName,
+                                ClusterOptions clusterOptions) {
         this.interfaceClass = interfaceClass;
         this.directTarget = null;
         this.registry = registry;
         this.client = client;
         this.timeoutMillis = timeoutMillis;
-        this.cluster = ExtensionLoader.getExtensionLoader(Cluster.class).getExtension(clusterName);
-        this.loadBalancer = ExtensionLoader.getExtensionLoader(LoadBalancer.class).getExtension(loadBalanceName);
+        // 自适应代理：默认用注解/配置的策略名，单次调用可通过RpcContext的
+        // cluster / loadbalance attachment临时覆盖
+        this.cluster = ExtensionLoader.getExtensionLoader(Cluster.class).getAdaptiveExtension(clusterName);
+        this.loadBalancer = ExtensionLoader.getExtensionLoader(LoadBalancer.class).getAdaptiveExtension(loadBalanceName);
+        this.clusterOptions = (clusterOptions == null) ? ClusterOptions.defaults() : clusterOptions;
         this.consumerFilters = FilterLoader.load(Side.CONSUMER);
         // 订阅只是感知列表变更的增强，失败不应阻断代理创建；invoke时仍走discover（带缓存兜底）。
         try {
@@ -221,7 +244,7 @@ public class RpcInvocationHandler implements InvocationHandler {
     }
 
     /**
-     * 同步/异步共用的链尾终端：走注册中心 discover + {@link Cluster#invoke}（内含负载均衡+容错重试）；
+     * 同步/异步共用的链尾终端：走注册中心discover + {@link Cluster#invoke}（内含负载均衡+容错重试）；
      * 直连模式则直接 {@code sendAsync} 到固定目标（无候选可选，Cluster语义在此不适用）。
      *
      * <p>两条路径都不同步抛异常——统一通过future的正常/异常完成表达结果，保持与
@@ -231,7 +254,7 @@ public class RpcInvocationHandler implements InvocationHandler {
         if (registry != null) {
             return req -> {
                 List<ServiceMeta> providers = registry.discover(interfaceClass.getName());
-                return cluster.invoke(providers, req, loadBalancer, remoteInvoker());
+                return cluster.invoke(providers, req, loadBalancer, remoteInvoker(), clusterOptions);
             };
         }
         return req -> client.sendAsync(req, directTarget, timeoutMillis);

@@ -1,0 +1,2 @@
+en=io.github.nitouge.conduit.common.spi.EnglishTranslator
+zh=io.github.nitouge.conduit.common.spi.ChineseTranslator

@@ -1,2 +1,4 @@
 en=io.github.nitouge.conduit.common.spi.EnglishGreeter
 zh=io.github.nitouge.conduit.common.spi.ChineseGreeter
+lifecycle=io.github.nitouge.conduit.common.spi.LifecycleGreeter
+broken=io.github.nitouge.conduit.common.spi.BrokenLifecycleGreeter
