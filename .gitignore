@@ -24,6 +24,7 @@ hs_err_pid*
 .settings/
 .classpath
 .project
+.run/
 
 # ===== OS =====
 .DS_Store

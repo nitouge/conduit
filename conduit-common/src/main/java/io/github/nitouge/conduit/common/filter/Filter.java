@@ -67,11 +67,14 @@ public interface Filter {
     /**
      * 是否启用本filter。默认启用。
      *
-     * <p>由 {@link FilterLoader} 在装载时按系统属性 {@code conduit.filter.<key>.enabled}
+     * <p>由 {@link FilterLoader} 在装载时按配置 {@code conduit.filter.<key>.enabled}
      * 决定——{@code <key>} 优先用 {@link #name()} 的小写形式（用户可读短名），
-     * 找不到时退化到类全限定名小写。属性未设置时一律按 {@code true}（即无配置 = 启用）。</p>
+     * 找不到时退化到类全限定名小写。属性未设置时一律按本方法返回值（即无配置 = 用filter自身默认）。</p>
      *
-     * <p>典型用途：内置filter默认注册、用户用环境变量/JVM参数按需关掉：
+     * <p>配置来源见 {@link io.github.nitouge.conduit.common.config.ConduitConfig}：JVM系统属性、
+     * Spring Boot的 {@code application.yml}/程序参数（{@code --key=value}）/环境变量都生效。</p>
+     *
+     * <p>典型用途：内置filter默认注册、用户按需开关：
      * <pre>{@code
      *   -Dconduit.filter.accesslog.enabled=false
      *   -Dconduit.filter.metrics.enabled=true

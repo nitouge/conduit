@@ -39,15 +39,15 @@
 
 ## 5. Registry
 
-- [ ] Nacos 注册中心适配 `M`
-- [ ] ZooKeeper 注册中心适配 `M`
-- [ ] Etcd 注册中心适配 `M`
+- [x] Nacos 注册中心适配 `M` — 拆分为独立 `conduit-registry-nacos`（核心仅保留抽象+local）；Spring/starter默认带上
+- [x] ZooKeeper 注册中心适配 `M` — 新增 `conduit-registry-zookeeper`：Curator临时节点(PersistentNode) + CuratorCache；内嵌 TestingServer 测试
+- [x] Etcd 注册中心适配 `M` — 新增 `conduit-registry-etcd`：jetcd租约+前缀watch+自动续租；内存fake测试
 
 ## 6. Observability
 
-- [ ] 分布式链路追踪 `L`
-- [ ] 核心指标采集 `M`
-- [ ] 结构化日志输出 `S`
+- [x] 分布式链路追踪 `L` — `TraceFilter` 自动生成/透传 traceId + MDC；`RpcContext.getTraceId/setTraceId`；默认开启
+- [x] 核心指标采集 `M` — `MetricsFilter` 统计QPS/成功失败/平均/最大/最小/延迟分桶与分位估算；默认关闭、按需开启
+- [x] 结构化日志输出 `S` — `StructuredLogFilter` 输出 JSON 访问日志（`CONDUIT.ACCESS.JSON`）；默认关闭
 
 ## 7. Benchmark
 

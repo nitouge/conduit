@@ -4,6 +4,7 @@ import io.github.nitouge.conduit.api.RpcRequest;
 import io.github.nitouge.conduit.api.RpcResponse;
 import io.github.nitouge.conduit.common.filter.Filter;
 import io.github.nitouge.conduit.common.filter.FilterChain;
+import io.github.nitouge.conduit.common.trace.TraceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +28,8 @@ public class AccessLogFilter implements Filter {
         return chain.invoke(request).whenComplete((resp, err) -> {
             long elapsed = System.currentTimeMillis() - start;
             boolean success = (err == null && (resp == null || !resp.hasException()));
-            log.info("[AccessLog] {} - {}ms - {}", method, elapsed, success ? "OK" : "FAIL");
+            log.info("[AccessLog] traceId={} {} - {}ms - {}",
+                    request.getAttachment(TraceContext.TRACE_ID), method, elapsed, success ? "OK" : "FAIL");
         });
     }
 

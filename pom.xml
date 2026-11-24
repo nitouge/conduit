@@ -19,6 +19,9 @@
         <module>conduit-protocol</module>
         <module>conduit-serialization</module>
         <module>conduit-registry</module>
+        <module>conduit-registry-nacos</module>
+        <module>conduit-registry-zookeeper</module>
+        <module>conduit-registry-etcd</module>
         <module>conduit-remoting</module>
         <module>conduit-cluster</module>
         <module>conduit-server</module>
@@ -45,6 +48,8 @@
         <kryo.version>5.6.2</kryo.version>
         <protostuff.version>1.8.0</protostuff.version>
         <nacos.version>2.3.2</nacos.version>
+        <curator.version>5.9.0</curator.version>
+        <jetcd.version>0.8.8</jetcd.version>
         <slf4j.version>2.0.16</slf4j.version>
         <logback.version>1.5.12</logback.version>
         <junit.version>5.11.3</junit.version>
@@ -86,6 +91,24 @@
             <dependency>
                 <groupId>io.github.nitouge</groupId>
                 <artifactId>conduit-registry</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.github.nitouge</groupId>
+                <artifactId>conduit-registry-nacos</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.github.nitouge</groupId>
+                <artifactId>conduit-registry-zookeeper</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.github.nitouge</groupId>
+                <artifactId>conduit-registry-etcd</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -166,6 +189,32 @@
                 <groupId>com.alibaba.nacos</groupId>
                 <artifactId>nacos-client</artifactId>
                 <version>${nacos.version}</version>
+            </dependency>
+
+            <!-- ZooKeeper注册中心（Curator） -->
+            <dependency>
+                <groupId>org.apache.curator</groupId>
+                <artifactId>curator-framework</artifactId>
+                <version>${curator.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.curator</groupId>
+                <artifactId>curator-recipes</artifactId>
+                <version>${curator.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.curator</groupId>
+                <artifactId>curator-test</artifactId>
+                <version>${curator.version}</version>
+            </dependency>
+
+            <!-- Etcd注册中心（jetcd） -->
+            <dependency>
+                <groupId>io.etcd</groupId>
+                <artifactId>jetcd-core</artifactId>
+                <version>${jetcd.version}</version>
             </dependency>
 
             <dependency>

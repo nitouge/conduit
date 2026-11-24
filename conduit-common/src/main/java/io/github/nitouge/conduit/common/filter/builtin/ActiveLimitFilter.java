@@ -2,6 +2,7 @@ package io.github.nitouge.conduit.common.filter.builtin;
 
 import io.github.nitouge.conduit.api.RpcRequest;
 import io.github.nitouge.conduit.api.RpcResponse;
+import io.github.nitouge.conduit.common.config.ConduitConfig;
 import io.github.nitouge.conduit.common.exception.RpcException;
 import io.github.nitouge.conduit.common.filter.Filter;
 import io.github.nitouge.conduit.common.filter.FilterChain;
@@ -16,8 +17,9 @@ import java.util.concurrent.Semaphore;
  * 并发隔离Filter（提供侧，信号量舱壁）：限制单个接口#方法在途并发数，超限快速失败。
  *
  * <p><b>默认关闭</b>——用 {@code -Dconduit.filter.activelimit.enabled=true} 开启。
- * 每方法上限用系统属性 {@code conduit.filter.activelimit.permits}（默认200）；
- * 也可用 {@code conduit.filter.activelimit.<method>.permits} 覆盖单个方法（method=接口#方法）。</p>
+ * 每方法上限用配置 {@code conduit.filter.activelimit.permits}（默认200）；
+ * 也可用 {@code conduit.filter.activelimit.<method>.permits} 覆盖单个方法（method=接口#方法）。
+ * （配置同样可写进Spring的application.yml，见 {@link ConduitConfig}。）</p>
  *
  * <p>用 {@link Semaphore#tryAcquire()} 非阻塞获取令牌：拿不到立即抛 {@link RpcException}（快速失败，
  * 保护提供者不被瞬时高并发压垮），拿到则在调用完成（无论成功失败）后释放。这是信号量隔离，相比线程池隔离更轻量、无额外线程切换。</p>
@@ -75,8 +77,8 @@ public class ActiveLimitFilter implements Filter {
 
     private Semaphore createSemaphore(String key) {
         // 单方法覆盖优先，否则用全局默认
-        String perMethod = System.getProperty("conduit.filter.activelimit." + key + ".permits");
-        String global = System.getProperty("conduit.filter.activelimit.permits");
+        String perMethod = ConduitConfig.get("conduit.filter.activelimit." + key + ".permits");
+        String global = ConduitConfig.get("conduit.filter.activelimit.permits");
         int permits = parsePositive(perMethod, parsePositive(global, DEFAULT_PERMITS));
         return new Semaphore(permits);
     }

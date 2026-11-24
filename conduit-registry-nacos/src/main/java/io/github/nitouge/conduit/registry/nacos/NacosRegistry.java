@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 基于Nacos的注册中心实现（M2默认）。把四个能力映射到Nacos NamingService：
+ * 基于Nacos的注册中心实现。把四个能力映射到Nacos NamingService：
  *
  * <ul>
  *   <li>注册 = 注册临时实例（ephemeral=true）</li>
@@ -51,7 +51,7 @@ public class NacosRegistry extends AbstractRegistry {
             instance.setWeight(service.getWeight());
             instance.setEphemeral(true);
             namingService.registerInstance(service.getServiceName(), instance);
-            log.debug("[NacosRegistry] Nacos返回 registerInstance成功 {}:{}:{}",
+            log.debug("[NacosRegistry] Nacos返回registerInstance成功 {}:{}:{}",
                     service.getServiceName(), service.getHost(), service.getPort());
         } catch (NacosException e) {
             throw new RpcException("注册服务到Nacos失败: " + service, e);
@@ -62,7 +62,7 @@ public class NacosRegistry extends AbstractRegistry {
     protected void doUnregister(ServiceMeta service) {
         try {
             namingService.deregisterInstance(service.getServiceName(), service.getHost(), service.getPort());
-            log.debug("[NacosRegistry] Nacos返回 deregisterInstance成功 {}:{}:{}",
+            log.debug("[NacosRegistry] Nacos返回deregisterInstance成功 {}:{}:{}",
                     service.getServiceName(), service.getHost(), service.getPort());
         } catch (NacosException e) {
             throw new RpcException("从Nacos注销服务失败: " + service, e);
@@ -73,7 +73,7 @@ public class NacosRegistry extends AbstractRegistry {
     protected List<ServiceMeta> doDiscover(String serviceName) {
         try {
             List<Instance> instances = namingService.selectInstances(serviceName, true);
-            log.debug("[NacosRegistry] Nacos返回 selectInstances {}: {}个healthy实例",
+            log.debug("[NacosRegistry] Nacos返回selectInstances {}: {}个healthy实例",
                     serviceName, instances == null ? 0 : instances.size());
             return toServiceMetas(serviceName, instances);
         } catch (NacosException e) {
@@ -87,12 +87,12 @@ public class NacosRegistry extends AbstractRegistry {
             namingService.subscribe(serviceName, event -> {
                 if (event instanceof NamingEvent) {
                     List<Instance> instances = ((NamingEvent) event).getInstances();
-                    log.debug("[NacosRegistry] Nacos push 事件 {}: {}个实例",
+                    log.debug("[NacosRegistry] Nacos push事件 {}: {}个实例",
                             serviceName, instances == null ? 0 : instances.size());
                     listener.notify(toServiceMetas(serviceName, instances));
                 }
             });
-            log.debug("[NacosRegistry] Nacos返回 subscribe成功 {}", serviceName);
+            log.debug("[NacosRegistry] Nacos返回subscribe成功 {}", serviceName);
         } catch (NacosException e) {
             throw new RpcException("订阅Nacos服务失败: " + serviceName, e);
         }

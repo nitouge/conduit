@@ -12,7 +12,7 @@ Conduit 是一个基于 Java 17 + Netty 实现的轻量级 RPC 框架，目标�
 ## ✨ 核心特性
 - **🔌 极致的可替换性**：业务代码零改动，仅通过 SPI 配置切换底层实现
     - **序列化**：JDK / JSON / Kryo / Protostuff
-    - **注册中心**：Nacos / ZooKeeper / Etcd
+    - **注册中心**：Nacos / ZooKeeper / Etcd / Local
     - **负载均衡**：Random / RoundRobin / ConsistentHash
     - **集群容错**：FailFast / FailOver / FailSafe / FailBack
 - **📦 自定义协议**：定长消息头 + 变长 Body，彻底解决拆包粘包问题
@@ -21,6 +21,7 @@ Conduit 是一个基于 Java 17 + Netty 实现的轻量级 RPC 框架，目标�
 - **🧩 可配置集群治理**：重试次数/退避与熔断阈值可配；支持 `@RpcReference` 字段级与 `RpcContext` 单次调用覆盖
 - **🔄 同步/异步双模**：基于 `CompletableFuture` 的请求响应关联
 - **🛡️ 三态熔断器**：Closed / Open / HalfOpen 自动状态流转
+- **🔎 可观测性**：traceId 自动生成/跨进程透传（MDC 串联日志）、核心指标（QPS/RT/错误率/延迟分布）、可选 JSON 结构化日志
 - **🌱 Spring 深度整合**：`@EnableConduit` / `@RpcService` / `@RpcReference`
 
 > 📖 **快速开始？** 请参阅 [使用手册 USER_GUIDE.md](docs/USER_GUIDE.md)
@@ -66,27 +67,30 @@ graph TD
 
 ## 🧱 模块结构
 
-共 12 个 `conduit-*` 模块，严格分层，**下层绝不依赖上层**，`api` 与 `common` 处于最底层；`conduit-example` 是示例聚合模块（不参与远程仓库发布），内含 `conduit-demo` 与 `conduit-starter-demo`（后者又聚合 api/provider/consumer 三个子工程）。
+共 15 个模块（含示例聚合），严格分层，**下层绝不依赖上层**，`api` 与 `common` 处于最底层；`conduit-example` 是示例聚合模块（不参与远程仓库发布），内含 `conduit-demo` 与 `conduit-starter-demo`（后者又聚合 api/provider/consumer 三个子工程）。
 
 ```text
 Conduit/
-├── conduit-api                    # 对外契约：RpcRequest/RpcResponse/ServiceMeta + 注解
-├── conduit-common                 # 公共基础：常量/工具类/异常 + SPI 引擎
-├── conduit-protocol                # 自定义协议：消息头 + RpcEncoder/RpcDecoder
-├── conduit-serialization           # Serializer 接口 + JDK/JSON/Kryo/Protostuff
-├── conduit-registry                # Registry 接口 + Nacos/Local
-├── conduit-remoting                # Netty 传输底座：NettyServer/NettyClient + 心跳
-├── conduit-server                  # 服务端：暴露 + 扫描 + 分发 + 注册
-├── conduit-client                  # 客户端：动态代理 + 发现 + 集群 + 调用
-├── conduit-cluster                 # 集群容错：LoadBalancer/Cluster/CircuitBreaker
-├── conduit-spring                  # Spring 整合：@EnableConduit/@RpcService/@RpcReference
-├── conduit-spring-boot-starter     # Spring Boot Starter：依赖即自动装配，无需@EnableConduit
-└── conduit-example                 # 示例聚合（不发布）
-    ├── conduit-demo                     # 可运行示例：api / provider / consumer（编程式）
-    └── conduit-starter-demo             # starter用法示例（聚合）
-        ├── conduit-starter-demo-api         # 共享接口
-        ├── conduit-starter-demo-provider    # 提供者进程
-        └── conduit-starter-demo-consumer    # 消费者进程
+├── conduit-api                        # 对外契约：RpcRequest/RpcResponse/ServiceMeta + 注解
+├── conduit-common                     # 公共基础：常量/工具类/异常 + SPI + Filter + trace
+├── conduit-protocol                   # 自定义协议：消息头 + RpcEncoder/RpcDecoder
+├── conduit-serialization              # Serializer 接口 + JDK/JSON/Kryo/Protostuff
+├── conduit-registry                   # Registry 抽象 + local（无第三方客户端依赖）
+├── conduit-registry-nacos             # Nacos 注册中心适配（nacos-client）
+├── conduit-registry-zookeeper         # ZooKeeper 注册中心适配（Curator）
+├── conduit-registry-etcd              # Etcd 注册中心适配（jetcd）
+├── conduit-remoting                   # Netty 传输底座：握手/连接池/心跳/重连/TLS
+├── conduit-server                     # 服务端：暴露 + 扫描 + 分发 + 注册
+├── conduit-client                     # 客户端：动态代理 + 发现 + 集群 + 调用
+├── conduit-cluster                    # 集群容错：LoadBalancer/Cluster/CircuitBreaker
+├── conduit-spring                     # Spring 整合：@EnableConduit/@RpcService/@RpcReference
+├── conduit-spring-boot-starter        # Spring Boot Starter：依赖即自动装配
+└── conduit-example                    # 示例聚合（不发布）
+    ├── conduit-demo                         # 可运行示例：api / provider / consumer（编程式）
+    └── conduit-starter-demo                 # starter用法示例（聚合）
+        ├── conduit-starter-demo-api             # 共享接口
+        ├── conduit-starter-demo-provider        # 提供者进程
+        └── conduit-starter-demo-consumer        # 消费者进程
 ```
 
 | 模块 | 职责 |
@@ -95,7 +99,10 @@ Conduit/
 | **conduit-common** | 常量、工具类（`NetUtils` / `StringUtils`）、异常体系，以及 SPI 引擎 `@SPI` + `ExtensionLoader`。 |
 | **conduit-protocol** | 协议常量、消息头、编解码器 `RpcEncoder` / `RpcDecoder`。 |
 | **conduit-serialization** | `Serializer` 接口（`@SPI`）+ `JdkSerializer` / `JsonSerializer` / `KryoSerializer` / `ProtostuffSerializer`。 |
-| **conduit-registry** | `Registry` 接口（`@SPI`）+ `NotifyListener` + `NacosRegistry` / `InMemoryRegistry`；可继续扩展其他注册中心。 |
+| **conduit-registry** | `Registry` 接口 + `NotifyListener` + `Registries` + 零依赖 `local` 实现；本地缓存兜底与订阅幂等。 |
+| **conduit-registry-nacos** | `NacosRegistry`：临时实例注册/发现/订阅；`conduit-spring`/starter 默认带上。 |
+| **conduit-registry-zookeeper** | `ZookeeperRegistry`：临时节点注册、`CuratorCache` 订阅；内嵌 TestingServer 测试。 |
+| **conduit-registry-etcd** | `EtcdRegistry`：租约 + 前缀 watch + 自动续租；内存 fake 测试。 |
 | **conduit-remoting** | `NettyServer` / `NettyClient`、协议握手（版本/codec/压缩能力协商）、连接池、心跳保活、断线重连、TLS，以及 requestId → `CompletableFuture` 关联表。 |
 | **conduit-server** | 服务暴露、`@RpcService` 扫描、服务缓存 `Map<String,Object>`、反射分发、向注册中心 `register`。 |
 | **conduit-client** | JDK 动态代理、`RpcClient`、同步/异步发起调用，整合发现 + 集群 + 负载均衡 + 序列化。 |
@@ -154,8 +161,17 @@ conduit.registry.type: local
 | `conduit.transport.heartbeat-interval-ms` | 心跳间隔，`0` 关闭 | 默认 `30000` |
 | `conduit.transport.reconnect.enabled` | 断线后台自动重连 | 默认 `true` |
 | `conduit.transport.tls.enabled` | 链路加密（TLS） | 默认 `false` |
-| `conduit.registry.type` | 注册中心类型 | `nacos`(默认) / `local` |
+| `conduit.registry.type` | 注册中心类型 | `nacos`(默认) / `local` / `zookeeper` / `etcd` |
 | `conduit.protocol.weight` | 服务节点权重 | 默认 `100` |
+| `conduit.filter.trace.enabled` | traceId自动生成/透传/MDC | 默认 `true` |
+| `conduit.filter.metrics.enabled` | QPS/RT/错误率/延迟分布指标 | 默认 `false` |
+| `conduit.filter.structuredlog.enabled` | JSON结构化访问日志 | 默认 `false` |
+| `conduit.filter.accesslog.enabled` | 文本访问日志（`CONDUIT.ACCESS`） | 默认 `true` |
+
+> `conduit.filter.*` 等框架开关既可用 JVM 参数 `-D...`，也可写进 `application.yml`、
+> 用 `--key=value` 程序参数或环境变量（`CONDUIT_FILTER_METRICS_ENABLED=true`）。
+
+> 注册中心适配按需引入：`conduit-spring`/starter 默认带 `conduit-registry-nacos`；只用 ZK/Etcd 时可排除并引入对应模块。
 
 ---
 
@@ -169,6 +185,8 @@ conduit.registry.type: local
 | **M4** | ✅ | 异步（`CompletableFuture`）+ 负载均衡（Random/RoundRobin/ConsistentHash）+ 集群容错（FailFast/Over/Safe/Back）+ 熔断。 |
 | **M5** | ✅ | Spring 集成 + 注解驱动（`@EnableConduit`/`@RpcService`/`@RpcReference`）+ `application.yml` 自动配置。 |
 | **传输层加固** | ✅ | 协议版本协商、数据压缩、TLS、连接池、心跳保活、断线自动重连；底层通信稳定可靠（见 [TRANSPORT.md](docs/TRANSPORT.md)）。 |
+| **核心扩展机制** | ✅ | `@Adaptive` 自适应扩展、`Lifecycle` 生命周期、可配置重试/退避与熔断参数。 |
+| **服务治理** | ✅ | ZooKeeper/Etcd 注册中心适配；traceId 链路追踪、核心指标、结构化日志（见 [REGISTRY.md](docs/REGISTRY.md) / [OBSERVABILITY.md](docs/OBSERVABILITY.md)）。 |
 
 > 构建需 **JDK 17**（Spring Boot 3.x 要求）：`set JAVA_HOME=<jdk17>` 后 `mvn clean test`
 
@@ -180,6 +198,8 @@ conduit.registry.type: local
 | --- | --- |
 | [USER_GUIDE.md](docs/USER_GUIDE.md) | **使用手册**：引入坐标、三种用法、配置项、序列化/容错/异步 |
 | [TRANSPORT.md](docs/TRANSPORT.md) | **传输层与协议**：帧格式、版本协商、压缩、心跳、连接池、断线重连、TLS、不变量 |
+| [REGISTRY.md](docs/REGISTRY.md) | **注册中心**：抽象/缓存兜底、Nacos/Local/ZooKeeper/Etcd 适配与使用 |
+| [OBSERVABILITY.md](docs/OBSERVABILITY.md) | **可观测性**：traceId、指标、结构化日志与开关 |
 | [FLOWCHARTS.md](docs/FLOWCHARTS.md) | **全局流程与流转图**：端到端时序、决策层、协议帧、SPI、注册发现、熔断状态机、线程模型、Spring 启停|
 | [ARCHITECTURE.md](temp/ARCHITECTURE.md) | 整体架构、模块分层、调用链路 |
 | [PROTOCOL.md](docs/PROTOCOL.md) | 自定义协议、消息头逐字段、拆包粘包 |

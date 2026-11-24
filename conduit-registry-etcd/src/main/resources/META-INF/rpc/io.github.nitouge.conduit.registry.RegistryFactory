@@ -1,0 +1,2 @@
+# Etcd注册中心扩展（name=实现类全限定名）
+etcd=io.github.nitouge.conduit.registry.etcd.EtcdRegistryFactory

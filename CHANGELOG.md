@@ -36,15 +36,35 @@
   - 熔断器可配置：新增 `CircuitBreakerOptions` 与 `CircuitBreakerRegistry.configure/state/reset`；
   - Cluster/LoadBalancer 经自适应代理支持单次调用覆盖（`RpcContext` 的 `cluster` / `loadbalance` attachment）。
 
+- **服务治理（Registry + Observability）**：
+  - 新增 `conduit-registry-zookeeper`：Curator 临时节点注册、`CuratorCache` 订阅、连接超时快速失败；使用 Curator `TestingServer` 内嵌测试。
+  - 新增 `conduit-registry-etcd`：jetcd 租约注册、自动续租/失败重注册、前缀 watch；通过内存 `EtcdOperations` 假实现覆盖逻辑测试。
+  - 新增 `TraceFilter`：自动生成/透传 traceId、MDC 绑定；`RpcContext` 增加 `getTraceId/setTraceId`；默认启用。
+  - 扩展 `MetricsFilter`：QPS/成功率、平均/最大/最小 RT、延迟分桶与分位估算、全局汇总与重置。
+  - 新增 `StructuredLogFilter`：一行 JSON 访问日志（`CONDUIT.ACCESS.JSON`），默认关闭。
+  - 新增 [docs/REGISTRY.md](docs/REGISTRY.md)、[docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)。
+  - 注册中心拆分：核心 `conduit-registry` 只保留抽象 + `local`；Nacos 迁到独立
+    `conduit-registry-nacos`（Spring/starter 默认带上），ZooKeeper/Etcd 为独立模块；
+    缺失适配模块时 `Registries` 给出明确的引入提示。
+  - 真实环境验证：本地 Nacos 2.x 下 `NacosRegistryCallTest` 不再跳过、`conduit-starter-demo`
+    两个真实进程跑通跨进程调用（provider/consumer pid 不同，Kryo + GZIP 按阈值协商生效）。
+
 ### Docs
 
 - 补齐开源基础文档：`LICENSE`（Apache-2.0）、`CONTRIBUTING.md`、`CHANGELOG.md`。
 - 新增 [docs/TRANSPORT.md](docs/TRANSPORT.md)：传输层与协议设计（帧格式、握手、压缩、心跳、连接池、重连、TLS、不变量）。
 - 新增 [docs/SPI.md](docs/SPI.md)：命名扩展、自适应加载、生命周期与扩展点清单。
 - 新增 [docs/CLUSTER.md](docs/CLUSTER.md)：负载均衡、容错、重试配置与熔断器机制。
+- 新增 [docs/REGISTRY.md](docs/REGISTRY.md)：注册中心抽象、Nacos/Local/ZooKeeper/Etcd 适配。
+- 新增 [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)：traceId、指标、结构化日志与开关。
 
 ### Fixed
 
+- `conduit.filter.*` 开关在 Spring 应用里只认 JVM 系统属性：写进 `application.yml` 或用程序参数
+  `--conduit.filter.metrics.enabled=true` 都不生效（把 `-D...` 填在 IDE 的 Program arguments 里同样无效）。
+  新增 `ConduitConfig` 统一解析（系统属性 > Spring `Environment` > 环境变量），
+  `ConduitAutoConfiguration` 在环境就绪时登记配置源并丢弃旧快照；`FilterLoader` / `ActiveLimitFilter`
+  改走该入口，禁用日志同时打印具体配置键。
 - `RpcDecoder` 遇到带 body 的心跳帧时未消费 body，会污染后续帧边界。
 - 请求 body 反序列化失败时直接断开连接，客户端只能等到超时；现在回传可序列化的错误响应。
 - 解码器未校验负数/超大 `length` 与业务帧协议版本。

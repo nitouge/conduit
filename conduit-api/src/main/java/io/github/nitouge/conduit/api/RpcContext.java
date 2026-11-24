@@ -73,4 +73,14 @@ public final class RpcContext {
             attachments.putAll(source);
         }
     }
+
+    /** 当前调用的traceId（attachment key="traceId"）；未设置返回null */
+    public String getTraceId() {
+        return attachments.get("traceId");
+    }
+
+    /** 设置当前调用的traceId（会随请求透传到提供侧，并被TraceFilter沿用） */
+    public void setTraceId(String traceId) {
+        setAttachment("traceId", traceId);
+    }
 }

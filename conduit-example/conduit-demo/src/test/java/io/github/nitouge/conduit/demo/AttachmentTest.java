@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -98,10 +99,14 @@ class AttachmentTest {
     }
 
     @Test
-    void emptyContextCallWorksNormally() {
-        // 没有设置traceId也能正常调用（attachments为null安全通过序列化）
+    void emptyContextCallStillGetsGeneratedTraceId() {
+        // 没有手动设置traceId也能正常调用；TraceFilter会自动生成traceId并透传
         String result = proxy.sayHello("noAttach");
         assertEquals("Hello, noAttach from Conduit!", result);
-        assertEquals(NONE, RECEIVED.get("noAttach"), "未携带attachments时，提供侧RpcContext应为空（getAttachment返回null）");
+
+        String received = RECEIVED.get("noAttach");
+        assertNotNull(received, "TraceFilter应为未携带traceId的调用自动生成一个");
+        assertEquals(32, received.length(), "自动生成的traceId应为32位十六进制");
+        assertNull(RpcContext.getContext().getTraceId(), "调用结束后消费侧RpcContext已清空");
     }
 }

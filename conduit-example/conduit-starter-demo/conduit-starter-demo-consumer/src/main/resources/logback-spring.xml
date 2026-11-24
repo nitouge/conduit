@@ -38,8 +38,9 @@
     1.默认（无profile）与dev/test 一样：框架日志为DEBUG，追踪完整链路
     2.启动时指定profile切换：
        -Dspring.profiles.active=prod     → 框架INFO，只看关键节点（发版用）
-    3.若需关闭访问日志（AccessLogFilter），可改CONDUIT.ACCESS为WARN或用系统属性：
-       -Dconduit.filter.accesslog.enabled=false
+    3.若需关闭访问日志（AccessLogFilter），可改CONDUIT.ACCESS为WARN，或在启动时用配置关闭：
+       -Dconduit.filter.accesslog.enabled=false（IntelliJ填VM options）或 application.yml 的
+       conduit.filter.accesslog.enabled: false
     4.纯Java（不带Spring）场景：复制本文件改名logback.xml，去掉<springProfile>标签，
        直接写死一个level（如<logger name="io.github.nitouge.conduit" level="DEBUG"/>）
     -->

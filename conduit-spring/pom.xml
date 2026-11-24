@@ -27,6 +27,13 @@
             <artifactId>conduit-server</artifactId>
         </dependency>
 
+        <!-- Spring整合默认注册中心为nacos：显式带上适配模块，保持starter/spring“开箱即用”。
+             只用ZK/Etcd的项目可排除本依赖并引入对应适配模块。 -->
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-registry-nacos</artifactId>
+        </dependency>
+
         <!-- M5 Spring整合（版本由父POM导入的spring-boot-dependencies BOM管理） -->
         <dependency>
             <groupId>org.springframework</groupId>

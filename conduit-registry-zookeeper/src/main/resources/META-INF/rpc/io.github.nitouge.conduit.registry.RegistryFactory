@@ -1,0 +1,2 @@
+# ZooKeeper注册中心扩展（name=实现类全限定名）
+zookeeper=io.github.nitouge.conduit.registry.zookeeper.ZookeeperRegistryFactory

@@ -1,0 +1,2 @@
+# Nacos注册中心扩展（name=实现类全限定名）
+nacos=io.github.nitouge.conduit.registry.nacos.NacosRegistryFactory

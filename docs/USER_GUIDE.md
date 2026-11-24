@@ -264,7 +264,7 @@ client.close();
 |---|---|---|
 | `conduit.enabled` | `true` | 设 `false` 关闭整个自动装配 |
 | `conduit.application.name` | `conduit-app` | 应用名 |
-| `conduit.registry.type` | `nacos` | 注册中心类型：`nacos` / `local`（后续 `zookeeper`/`etcd`） |
+| `conduit.registry.type` | `nacos` | 注册中心类型：`nacos` / `local` / `zookeeper` / `etcd` |
 | `conduit.registry.address` | `127.0.0.1:8848` | 注册中心地址 |
 | `conduit.protocol.host` | `127.0.0.1` | 服务端绑定主机 |
 | `conduit.protocol.port` | `20880` | 服务端监听端口（消费者可不配） |
@@ -396,15 +396,36 @@ f.thenAccept(System.out::println);   // 结果回来时回调，不阻塞当前�
 ```yaml
 conduit:
   registry:
-    type: nacos               # 切换：nacos / local（后续 zookeeper / etcd）
+    type: nacos               # nacos / local / zookeeper / etcd
     address: 127.0.0.1:8848
 ```
 
-- `nacos`：生产用，需 Nacos 2.x。
-- `local`：进程内注册中心，无需外部组件，适合测试 / 同 JVM。
-- `zookeeper` / `etcd`：同一 `RegistryFactory` SPI，新增实现即可，业务零改动。
+- `nacos`：生产用，需 Nacos 2.x（默认）；由 `conduit-spring`/starter 默认带上。
+- `local`：进程内注册中心，无需外部组件，适合测试 / 同 JVM（核心内置）。
+- `zookeeper`：需额外引入 `conduit-registry-zookeeper`，地址如 `127.0.0.1:2181`。
+- `etcd`：需额外引入 `conduit-registry-etcd`，地址如 `127.0.0.1:2379`。
+
+```xml
+<!-- 按需引入：核心 conduit-registry 只带 local，不含任何注册中心客户端 -->
+<dependency>
+  <groupId>io.github.nitouge</groupId>
+  <artifactId>conduit-registry-nacos</artifactId>
+</dependency>
+<dependency>
+  <groupId>io.github.nitouge</groupId>
+  <artifactId>conduit-registry-zookeeper</artifactId>
+</dependency>
+<dependency>
+  <groupId>io.github.nitouge</groupId>
+  <artifactId>conduit-registry-etcd</artifactId>
+</dependency>
+```
+
+> 只依赖 `conduit-client`/`conduit-server` 编程式使用时，默认的 nacos 需要显式引入
+> `conduit-registry-nacos`；缺失时 `Registries` 会提示需要引入哪个模块。
 
 注册中心宕机时，消费者会用**本地缓存**的最近一次发现结果兜底，仍可调用既有提供者。
+存储模型与实现细节见 [REGISTRY.md](REGISTRY.md)。
 
 ---
 
@@ -491,6 +512,29 @@ curl "http://127.0.0.1:8080/greet?name=Tom"
 
 consumer 会经 Nacos 发现 provider，再通过 RPC 返回结果。停止 provider 后再次调用应失败，重新启动 provider 后恢复，以此验证这是跨进程远程调用。
 
+预期输出（两个 pid 不同，即证明是跨进程调用，而不是同进程内的本地调用）：
+
+```
+$ curl "http://127.0.0.1:8080/greet?name=Tom"
+[consumer进程pid=27852] 远程返回 → Hi, Tom! —— 来自provider进程(pid=38036, rpcPort=20880)
+```
+
+`spring-boot:run` 之外，也可以直接运行 fat jar（第 2 步的 `package` 已生成）：
+
+```bash
+java -jar conduit-example/conduit-starter-demo/conduit-starter-demo-provider/target/conduit-starter-demo-provider-1.0.0-SNAPSHOT.jar
+java -jar conduit-example/conduit-starter-demo/conduit-starter-demo-consumer/target/conduit-starter-demo-consumer-1.0.0-SNAPSHOT.jar
+```
+
+一次成功的跨进程调用应在日志里留下这条链路的四个证据：
+
+| 环节 | 日志证据 |
+|---|---|
+| 注册 | provider：`[REGISTER-SERVICE] ... GreetService with instance Instance{...port=20880...}` |
+| 发现 | consumer：`[NacosRegistry] Nacos返回selectInstances ... 1个healthy实例`，随后 `[RandomLoadBalancer] ... -> 127.0.0.1:20880` |
+| 握手协商 | 两端：`握手成功 ... Negotiated{version=1, codec=3, compress=1}`（codec=3 为 Kryo，compress=1 为 GZIP） |
+| 可观测性 | 两端 `[AccessLog] traceId=...` 同一个 traceId；请求超过 `compress-threshold` 时 `RpcEncoder` 打印 `rawBytes=1565, wireBytes=96` |
+
 不想启动 Nacos 时，可以运行 `StarterAutoConfigInProcessTest`。该测试使用 `local` 内存注册中心，在单进程内验证 starter 自动装配和真实 Netty 调用：
 
 ```bash
@@ -507,6 +551,50 @@ mvn -pl conduit-example/conduit-starter-demo/conduit-starter-demo-provider -am t
 | 普通 Spring 应用 | `conduit-spring`（配置类加 `@EnableConduit`） |
 | 编程式 · 提供者 | `conduit-server` |
 | 编程式 · 消费者 | `conduit-client` |
-| 仅需注册中心抽象 | `conduit-registry`（含 nacos/local 实现） |
+| 仅需注册中心抽象 | `conduit-registry`（仅抽象 + local 实现） |
+| Nacos 注册中心 | `conduit-registry-nacos`（Spring/starter 默认带上） |
+| ZooKeeper 注册中心 | `conduit-registry-zookeeper`（Curator） |
+| Etcd 注册中心 | `conduit-registry-etcd`（jetcd） |
 
 > 上述依赖都已传递带上其需要的下层模块（协议、传输、序列化实现、注册中心实现）。共享的**服务接口**由你自己的工程定义，不依赖 Conduit。
+
+---
+
+## 15. 可观测性
+
+Filter 内置、按属性开关。属性可来自三种地方（优先级从高到低）：
+
+1. JVM 系统属性：`-Dconduit.filter.metrics.enabled=true`（IntelliJ 里要填 **VM options**，不是 Program arguments）；
+2. Spring Boot 配置：`application.yml` 的 `conduit.filter.*`，或程序参数 `--conduit.filter.metrics.enabled=true`；
+3. 环境变量：`CONDUIT_FILTER_METRICS_ENABLED=true`。
+
+| 能力 | 属性 | 默认 |
+|---|---|---|
+| traceId 生成/透传 + MDC | `conduit.filter.trace.enabled` | 开 |
+| 指标（QPS/RT/错误率/延迟分布） | `conduit.filter.metrics.enabled` | 关 |
+| JSON 结构化访问日志 | `conduit.filter.structuredlog.enabled` | 关 |
+| 文本访问日志 | `conduit.filter.accesslog.enabled` | 开 |
+| 提供侧并发隔离 | `conduit.filter.activelimit.enabled` / `...permits` | 关 / 200 |
+
+开关在首次装载 filter 时读取，**改完要重启进程**。
+
+```yaml
+conduit:
+  filter:
+    metrics:
+      enabled: true
+    structuredlog:
+      enabled: true
+    accesslog:
+      enabled: false
+```
+
+- **traceId**：默认自动生成并随 `RpcRequest.attachments` 透传；可用
+  `RpcContext.getContext().setTraceId("...")` 主动指定，提供侧业务通过
+  `RpcContext.getContext().getTraceId()` 读取；日志 pattern 加 `%X{traceId}` 即可串联。
+- **指标**：`MetricsFilter.snapshot()` 读取每个 `interface#method` 的总量/成功/失败/平均/最大/
+  最小/延迟分桶与分位估算，`MetricsFilter.reset()` 重置。
+- **结构化日志**：logger `CONDUIT.ACCESS.JSON`，每调用一行 JSON（timestamp/traceId/interface/
+  method/durationMs/success[/errorType/errorMessage]）。
+
+> 详细行为、异步限制与配置示例见 [OBSERVABILITY.md](OBSERVABILITY.md)。

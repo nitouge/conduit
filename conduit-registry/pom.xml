@@ -13,7 +13,7 @@
 
     <artifactId>conduit-registry</artifactId>
     <name>conduit-registry</name>
-    <description>注册中心抽象与实现</description>
+    <description>注册中心抽象与进程内实现（Nacos/ZooKeeper/Etcd 见独立适配模块）</description>
 
     <dependencies>
         <dependency>
@@ -26,14 +26,10 @@
             <artifactId>conduit-common</artifactId>
         </dependency>
 
-        <!-- M2：Nacos注册中心实现（版本由父POM锁定） -->
-        <dependency>
-            <groupId>com.alibaba.nacos</groupId>
-            <artifactId>nacos-client</artifactId>
-        </dependency>
-
         <!--
-          后续ZooKeeper（Curator）/Etcd（jetcd）实现时再分别加入对应客户端。
+          核心只保留抽象 + 零依赖的 local 实现；具体注册中心客户端在独立模块：
+            conduit-registry-nacos / conduit-registry-zookeeper / conduit-registry-etcd
+          按需引入，避免让只用 local 的应用被动下载多套客户端。
         -->
     </dependencies>
 </project>
