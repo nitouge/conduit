@@ -109,6 +109,23 @@ public final class ConduitConfig {
     }
 
     /**
+     * 读取正整数配置（long 形态，用于毫秒/字节等容易超出 int 的量）；未配置、非法或非正数时返回
+     * {@code defaultValue}
+     */
+    public static long getPositiveLong(String key, long defaultValue) {
+        String value = get(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            long parsed = Long.parseLong(value.trim());
+            return parsed > 0 ? parsed : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
      * 配置项名 → 环境变量名：小写点分键转大写下划线，例如 {@code a.b-c} → {@code A_B_C}
      */
     static String envKey(String key) {

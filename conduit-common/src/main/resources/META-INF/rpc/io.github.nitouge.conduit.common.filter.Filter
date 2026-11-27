@@ -1,19 +1,27 @@
 # 内置Filter SPI配置（name=实现类全限定名），由ExtensionLoader加载。
 #
-# 框架默认注册6个通用filter；按配置 conduit.filter.<name>.enabled=<true|false> 控制开关。
+# 框架默认注册8个通用filter；按配置 conduit.filter.<name>.enabled=<true|false> 控制开关。
 # 配置来源：JVM参数 -Dconduit.filter.<name>.enabled=... / application.yml 的 conduit.filter.* /
 # 程序参数 --conduit.filter.<name>.enabled=... / 环境变量 CONDUIT_FILTER_<NAME>_ENABLED=...
 #   accesslog    - 默认开：双侧访问日志（CONDUIT.ACCESS logger）
 #   trace        - 默认开：traceId生成/透传/MDC绑定
 #   structuredlog- 默认关：JSON访问日志（CONDUIT.ACCESS.JSON；conduit.filter.structuredlog.enabled=true开启）
-#   exception    - 默认开：提供侧异常规整（避免消费侧反序列化失败）
+#   idempotency  - 默认开：消费侧给每次逻辑调用生成幂等键（conduit.filter.idempotency.enabled=false关闭）
 #   metrics      - 默认关：双侧QPS/RT/错误率/延迟分布累计（conduit.filter.metrics.enabled=true开启）
+#   idempotent   - 默认开：提供侧按幂等键去重（conduit.filter.idempotent.enabled=false关闭；
+#                  可选 conduit.filter.idempotent.ttl-ms / max-entries）
+#   ratelimit    - 默认关：提供侧QPS令牌桶（conduit.filter.ratelimit.enabled=true开启；
+#                  可选 conduit.filter.ratelimit.qps / global-qps / burst / <接口#方法>.qps）
+#   exception    - 默认开：提供侧异常规整（避免消费侧反序列化失败）
 #   activelimit  - 默认关：提供侧并发隔离（conduit.filter.activelimit.enabled=true开启；可选 conduit.filter.activelimit.permits=N）
 #
 # 用户可在自己的META-INF/rpc/io.github.nitouge.conduit.common.filter.Filter中追加自定义filter（与内置并存）。
 accesslog=io.github.nitouge.conduit.common.filter.builtin.AccessLogFilter
 trace=io.github.nitouge.conduit.common.filter.builtin.TraceFilter
 structuredlog=io.github.nitouge.conduit.common.filter.builtin.StructuredLogFilter
-exception=io.github.nitouge.conduit.common.filter.builtin.ExceptionFilter
+idempotency=io.github.nitouge.conduit.common.filter.builtin.IdempotencyFilter
 metrics=io.github.nitouge.conduit.common.filter.builtin.MetricsFilter
+idempotent=io.github.nitouge.conduit.common.filter.builtin.IdempotentFilter
+ratelimit=io.github.nitouge.conduit.common.filter.builtin.RateLimitFilter
+exception=io.github.nitouge.conduit.common.filter.builtin.ExceptionFilter
 activelimit=io.github.nitouge.conduit.common.filter.builtin.ActiveLimitFilter

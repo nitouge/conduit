@@ -9,6 +9,9 @@ Conduit 的可观测性完全落在 **Filter 链**上，无需业务代码改动
 | 结构化 JSON 访问日志 | `StructuredLogFilter` | 关 | `conduit.filter.structuredlog.enabled` |
 | 文本访问日志 | `AccessLogFilter` | 开 | `conduit.filter.accesslog.enabled` |
 | 提供侧并发隔离 | `ActiveLimitFilter` | 关 | `conduit.filter.activelimit.enabled`（`...permits` 设上限） |
+| 提供侧 QPS 限流（令牌桶） | `RateLimitFilter` | 关 | `conduit.filter.ratelimit.enabled`（`...qps` / `...global-qps`） |
+| 幂等键生成（消费侧） | `IdempotencyFilter` | 开 | `conduit.filter.idempotency.enabled` |
+| 幂等去重（提供侧） | `IdempotentFilter` | 开 | `conduit.filter.idempotent.enabled`（`...ttl-ms` / `...max-entries`） |
 
 ---
 

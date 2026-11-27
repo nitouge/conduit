@@ -131,8 +131,9 @@ public class MyRegistry implements RegistryFactory, Lifecycle {
 | `Serializer` | `conduit-serialization` | `jdk` | jdk / json / kryo / protostuff |
 | `RegistryFactory` | `conduit-registry` + 各适配模块 | `nacos` | local（核心）/ nacos / zookeeper / etcd |
 | `LoadBalancer` | `conduit-cluster` | `random` | random / roundRobin / consistentHash |
+| `Router` | `conduit-cluster` | `default` | default（version/group/tag 硬过滤 + zone 软优先） |
 | `Cluster` | `conduit-cluster` | `failover` | failfast / failover / failsafe / failback |
-| `Filter` | `conduit-common` | 无默认（显式注册） | accesslog / trace / structuredlog / exception / metrics / activelimit |
+| `Filter` | `conduit-common` | 无默认（显式注册） | accesslog / trace / structuredlog / idempotency / metrics / idempotent / ratelimit / exception / activelimit |
 
 > 注意 `Registry` 的实现是按**模块**拆分的：核心只带 `local`，nacos/zookeeper/etcd 各自一个模块带一行
 > `META-INF/rpc/...RegistryFactory` 配置，引入依赖即生效（`Registries` 在缺失时会提示该引哪个模块）。

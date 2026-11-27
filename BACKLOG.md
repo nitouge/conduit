@@ -86,8 +86,8 @@
 
 - [x] 请求取消与 deadline 传递 `M` — `TYPE_CANCEL` 控制帧（body 1 字节原因）+ 服务端 `ServerCallRegistry` 中断在途线程；deadline 以绝对时间写进 attachments，逐跳取 `min(上游, now+本地超时)`，服务端到点自我中断、已过期请求不占业务线程；客户端本地等待与每次重试的传输超时都用剩余预算
 - [x] 路由规则 `M` — `ServiceMeta` 增加 version/group/tag/zone 并随注册中心发布（Nacos metadata / ZK 节点数据 / Etcd value）；新增 `Router` SPI，`discover → route → loadbalance`：version/group/tag 硬过滤、zone 软优先，硬过滤为空直接报错；`@RpcService`/`@RpcReference` 与 `RpcContext` attachment 双向支持
-- [ ] QPS 限流 `S` — 目前只有并发隔离（`ActiveLimitFilter` 信号量）；补令牌桶形态的方法级/全局限流
-- [ ] 重试幂等 `M` — Failover 会重放请求，但无幂等键与服务端去重；非幂等接口开重试可能重复执行
+- [x] QPS 限流 `S` — 新增 `RateLimitFilter`（令牌桶：方法级 + 全局限额，qps/burst 可配），与 `ActiveLimitFilter` 分工为「挡瞬时尖峰 / 挡在途堆积」，均快速失败；提供侧生效
+- [x] 重试幂等 `M` — 消费侧 `IdempotencyFilter` 为每次逻辑调用生成幂等键（failover 重放复用同一个键），提供侧 `IdempotentFilter` 按键去重（已完成返回缓存、执行中挂同一 future、失败不缓存，TTL/条目数封顶）；去重表是进程内的，跨节点重复仍需集中式存储
 - [ ] 追踪 span 化与采样 `M` — 只有 traceId，缺 spanId/父子关系/采样率，异步线程上下文也未传播
 - [ ] 客户端写背压 `S` — 服务端变慢时缺少基于 channel writability 的在途水位控制与快速失败
 

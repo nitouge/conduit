@@ -37,6 +37,15 @@ public final class RpcAttachments {
     /** traceId（历史键名保持 {@code traceId} 不变，避免破坏已有日志采集规则） */
     public static final String TRACE_ID = "traceId";
 
+    /**
+     * 幂等键：同一次<b>逻辑调用</b>共用一个键，服务端据此去重。
+     *
+     * <p>关键在「逻辑调用」而不是「一次尝试」：failover 重放的是同一个请求对象，键不变；调用方
+     * 两次独立的业务操作会各自拿到新键。消费侧默认自动生成（{@code IdempotencyFilter}），也可以
+     * 自己指定（如用订单号）来实现业务级幂等。</p>
+     */
+    public static final String IDEMPOTENCY_KEY = "conduit.idempotency-key";
+
     private RpcAttachments() {
     }
 

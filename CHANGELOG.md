@@ -86,6 +86,16 @@
   - 文档同步：[TRANSPORT.md](docs/TRANSPORT.md) §6 取消与 deadline、[CLUSTER.md](docs/CLUSTER.md) §2 路由、
     [REGISTRY.md](docs/REGISTRY.md) 路由属性存储格式。
 
+- **限流与幂等（Governance）**：
+  - 新增 `RateLimitFilter`：提供侧令牌桶限流，方法级（`conduit.filter.ratelimit.qps`，可单方法覆盖）+
+    全局限额（`...global-qps`），桶容量 `...burst` 默认等于 qps；超限立即 `RpcException` 快速失败。
+    与 `ActiveLimitFilter`（信号量并发隔离）互补：一个挡瞬时尖峰、一个挡在途堆积。
+  - 新增 `IdempotencyFilter`（消费侧）与 `IdempotentFilter`（提供侧）：消费侧给每次**逻辑调用**
+    生成/保留幂等键（`RpcAttachments.IDEMPOTENCY_KEY`），failover 重放复用同一个键；提供侧按键去重
+    ——已完成直接返回缓存结果、执行中挂到同一 future、失败不缓存，去重表按 TTL/条目数封顶。
+    两者默认启用，`conduit.filter.idempotency.enabled` / `conduit.filter.idempotent.enabled=false` 可关闭。
+  - `ConduitConfig` 增加 `getPositiveLong`；filter 开关表、SPI 扩展点清单与 [CLUSTER.md](docs/CLUSTER.md) 同步更新。
+
 ### Docs
 
 - 补齐开源基础文档：`LICENSE`（Apache-2.0）、`CONTRIBUTING.md`、`CHANGELOG.md`。

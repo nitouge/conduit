@@ -173,6 +173,8 @@ conduit.registry.type: local
 | `conduit.filter.metrics.enabled` | QPS/RT/错误率/延迟分布指标 | 默认 `false` |
 | `conduit.filter.structuredlog.enabled` | JSON结构化访问日志 | 默认 `false` |
 | `conduit.filter.accesslog.enabled` | 文本访问日志（`CONDUIT.ACCESS`） | 默认 `true` |
+| `conduit.filter.ratelimit.enabled` | 提供侧QPS令牌桶限流（`...qps` / `...global-qps`） | 默认 `false` |
+| `conduit.filter.idempotent.enabled` | 提供侧按幂等键去重（`...ttl-ms` / `...max-entries`） | 默认 `true` |
 
 > `conduit.filter.*` 等框架开关既可用 JVM 参数 `-D...`，也可写进 `application.yml`、
 > 用 `--key=value` 程序参数或环境变量（`CONDUIT_FILTER_METRICS_ENABLED=true`）。

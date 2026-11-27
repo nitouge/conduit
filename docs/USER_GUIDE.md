@@ -606,6 +606,9 @@ Filter 内置、按属性开关。属性可来自三种地方（优先级从高�
 | JSON 结构化访问日志 | `conduit.filter.structuredlog.enabled` | 关 |
 | 文本访问日志 | `conduit.filter.accesslog.enabled` | 开 |
 | 提供侧并发隔离 | `conduit.filter.activelimit.enabled` / `...permits` | 关 / 200 |
+| 提供侧 QPS 限流（令牌桶） | `conduit.filter.ratelimit.enabled` / `...qps` / `...global-qps` | 关 / 1000 / 0（不限） |
+| 幂等键生成（消费侧） | `conduit.filter.idempotency.enabled` | 开 |
+| 幂等去重（提供侧） | `conduit.filter.idempotent.enabled` / `...ttl-ms` / `...max-entries` | 开 / 60000 / 4096 |
 
 开关在首次装载 filter 时读取，**改完要重启进程**。
 

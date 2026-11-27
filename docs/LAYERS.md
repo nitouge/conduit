@@ -50,7 +50,7 @@ RPC 框架的知识可以按"解决什么问题"分成三层，逐层递进：
 | 取消与 deadline | `TYPE_CANCEL` 控制帧 + `ServerCallRegistry` + `RpcAttachments.DEADLINE` | 客户端超时/放弃 → 发 CANCEL → 服务端中断正在执行业务的线程；deadline 为绝对时间、逐跳取 `min(上游, now+本地超时)`，到点服务端自我中断；已过期请求连业务线程都不占 | `CancelDeadlineIntegrationTest`、`RpcCodecTest.cancel*` |
 | 服务端请求分发 | `NettyServerHandler` → `RpcRequestHandler` → `ServiceCache` | IO 线程派发到业务线程池，反射调用；**池满（有界队列 + AbortPolicy）立即回"繁忙"错误**，不让客户端干等超时 | `RobustnessTest`、`CompressionIntegrationTest` |
 | 异常传播 | `RpcResponse.error` + `ExceptionFilter` + 客户端 `RpcInvocationHandler` | 业务异常/不可序列化结果都会转成可序列化的错误响应回传；客户端还原为 `RpcException` | `RobustnessTest.nonSerializableResultReturnsErrorNotTimeout`、`ReviewFixesTest` |
-| 横切能力（Filter 链） | `FilterLoader` + `FilterChainBuilder` | 消费侧/提供侧各一条链，按 `order()` 排序；trace/accesslog/metrics/structuredlog/exception/activelimit 都是 Filter | `FilterChainTest`、`ObservabilityE2ETest` |
+| 横切能力（Filter 链） | `FilterLoader` + `FilterChainBuilder` | 消费侧/提供侧各一条链，按 `order()` 排序；trace/accesslog/metrics/structuredlog/idempotency/idempotent/ratelimit/activelimit/exception 都是 Filter | `FilterChainTest`、`ObservabilityE2ETest` |
 
 **这一层的设计取舍**
 
@@ -71,8 +71,8 @@ RPC 框架的知识可以按"解决什么问题"分成三层，逐层递进：
 | 集群容错 | `Failover`/`Failfast`/`Failsafe`/`Failback` | 熔断节点快速跳过且**不消耗重试预算**；重试次数/退避可全局配置也可注解级覆盖 | `ClusterTest`、`ClusterRetryConfigTest` |
 | 路由规则 | `Router` SPI + `DefaultRouter` + `ServiceMeta.version/group/tag/zone` | `discover → route → loadbalance`：version/group/tag 硬过滤、zone 软优先（同机房优先）；硬过滤为空直接报错并列出候选属性，不回退全量；`@RpcService`/`@RpcReference` 与 `RpcContext` attachment 双向支持 | `DefaultRouterTest`、`RoutingIntegrationTest`、`ZookeeperRegistryTest.routingAttributesSurviveRegistration` |
 | 熔断 | `CircuitBreaker` + `CircuitBreakerRegistry` | 节点级三态（CLOSED/OPEN/HALF_OPEN）、阈值/打开时长可配；`state()` 可观测 | `CircuitBreakerTest`、`MultiNodeClusterIntegrationTest.breakerOpensAndFailsFastAfterRepeatedFailures` |
-| 限流 | ⚠️ 只有并发隔离 `ActiveLimitFilter`（信号量，按方法限在途数） | 超出即快速失败；**没有 QPS 令牌桶/热点参数限流** | `ActiveLimitFilter` 相关用例 |
-| 重试与幂等 | 重试 ✅ / 幂等 ❌ | Failover 会重放请求，但框架不提供幂等键或服务端去重，**非幂等接口开重试可能重复执行** | `ClusterRetryConfigTest` |
+| 限流 | `RateLimitFilter`（令牌桶）+ `ActiveLimitFilter`（信号量并发隔离） | QPS 与并发两个维度分开挡：令牌桶挡瞬时尖峰（方法级 + 全局限额），信号量挡在途堆积；两者都**快速失败**而不是排队 | `RateLimitFilterTest`、`GovernanceFiltersIntegrationTest.qpsLimitRejectsExcessRequestsFast` |
+| 重试与幂等 | 重试 ✅ / 幂等 ✅（`IdempotencyFilter` + `IdempotentFilter`） | 消费侧给每次**逻辑调用**生成幂等键（重放复用同一个键），提供侧按键去重：已完成直接返回缓存、执行中挂同一个 future、失败不缓存；去重表按 TTL/条目数封顶且**仅进程内**（跨节点重复需集中式存储） | `IdempotencyFilterTest`、`IdempotentFilterTest`、`GovernanceFiltersIntegrationTest.sameIdempotencyKeyExecutesOnceAcrossRepeatedRequests` |
 | 链路追踪 | `TraceFilter` + `RpcContext` + MDC | traceId 自动生成、随 attachments 跨进程透传、写入 MDC；访问日志/JSON 日志带 traceId | `TraceFilterTest`、`ObservabilityE2ETest` |
 | 指标 | `MetricsFilter` | 按 `interface#method` 统计 QPS/成功率/RT/延迟分桶与分位估算 | `MetricsFilterTest` |
 | 结构化日志 | `StructuredLogFilter` | 一行 JSON（`CONDUIT.ACCESS.JSON`），便于采集 | `StructuredLogFilterTest` |
@@ -140,7 +140,5 @@ mvn -pl conduit-it -am test -Dit.distributed=true   # 多JVM + Nacos 分布式�
 
 | 层 | 缺口 | 影响 | 建议 |
 | --- | --- | --- | --- |
-| Governance | QPS 限流 | 只有并发隔离，挡不住流量突刺 | 令牌桶 Filter（方法级 + 全局），配合既有快速失败语义 |
-| Governance | 重试幂等 | 非幂等接口开 failover 可能重复下单 | 约定幂等键 attachment + 服务端去重表，或在文档中明确限制 |
 | Governance | 追踪 span 化 | 只有 traceId，没有 span/父子关系/采样 | 引入 spanId + 采样率；异步线程上下文传播 |
 | Transport | 客户端写背压 | 服务端变慢时客户端可能堆积在途请求 | 基于 channel writability 的水位控制 + 在途上限快速失败 |

@@ -103,8 +103,30 @@ greetService.hello("x");
 1. **算总账**：`最坏总耗时 ≈ (retries + 1) × timeout + retries × retry-backoff-ms`。
    上游调用方的整体超时必须 ≥ 这个值，否则上游先超时、重试白跑；`retries` 也不宜过大，
    故障期间会把耗时和下游压力一起放大。
-2. **只对幂等操作开重试**：`failover` 会重放请求，非幂等写操作请显式用 `failfast`
-   （框架目前不提供幂等键/服务端去重，见 BACKLOG §9）。
+2. **只对幂等操作开重试**：`failover` 会重放请求。框架提供了幂等键 + 服务端去重（见下），但
+   **去重表是进程内的**——重放落到另一个节点时挡不住。对「不能重复执行」的写操作，仍建议
+   `failfast`，或在业务侧用唯一键（订单号）做真正的幂等。
+
+### 幂等：让重放可重放
+
+```text
+消费侧 IdempotencyFilter            提供侧 IdempotentFilter
+  每次"逻辑调用"生成一个键    ──►   按键查表：已完成→返回缓存；执行中→等同一个future；无记录→执行并缓存
+  failover 重放复用同一个键
+```
+
+- **键在「逻辑调用」这一层生成**，不在每次尝试里生成：`failover` 重放的是同一个 `RpcRequest`
+  对象，所以两次尝试天然共享同一个键——这是「重放能被识别为重放」的前提；
+- 调用方可以自己指定键（如订单号）：`RpcContext.getContext().setAttachment(RpcAttachments.IDEMPOTENCY_KEY, orderNo)`，
+  消费侧的自动生成会尊重已有键；
+- 提供侧命中时**不会**进入业务方法，也不消耗限流/并发许可（去重 Filter 在链的更外层）；
+- 失败不缓存：传输异常会移除条目，重试还能真正重试；
+- 去重表 TTL 默认 60s、条目上限 4096，超出淘汰已完成条目——内存必须有上界；
+- 默认两端都启用（`conduit.filter.idempotency.enabled` / `conduit.filter.idempotent.enabled`），
+  服务端没有该 Filter 时，键只是被忽略，不改变任何行为。
+
+> 跨节点/跨机房的重复执行需要集中式去重（Redis `SETNX`、数据库唯一键）。本机制定位是
+> 「不引入外部依赖时的第一道防线」，不是分布式事务。
 
 ---
 
