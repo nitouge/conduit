@@ -49,6 +49,20 @@ public final class RpcContext {
         return ctx;
     }
 
+    /**
+     * 把给定上下文直接挂到当前线程（{@link ContextSnapshot} 做跨线程传播时用）。
+     *
+     * <p>传 {@code null} 等价于清空。包内可见：这是"把线程本地状态搬来搬去"的底层操作，
+     * 业务代码应该用 {@link #getContext()} / {@link #removeContext()} 或 {@link ContextSnapshot}。</p>
+     */
+    static void attach(RpcContext context) {
+        if (context == null) {
+            CONTEXT.remove();
+        } else {
+            CONTEXT.set(context);
+        }
+    }
+
     /** 写入附加参数 */
     public void setAttachment(String key, String value) {
         if (key != null) {

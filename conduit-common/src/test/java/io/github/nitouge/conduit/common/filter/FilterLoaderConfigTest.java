@@ -37,8 +37,10 @@ class FilterLoaderConfigTest {
         assertTrue(provider.contains("metrics"), "配置源里metrics=true应启用: " + provider);
         assertTrue(provider.contains("structuredlog"), "配置源里structuredlog=true应启用: " + provider);
         assertFalse(provider.contains("accesslog"), "配置源里accesslog=false应禁用: " + provider);
-        assertTrue(provider.contains("trace"), "未配置的filter沿用自身默认（开）: " + provider);
         assertTrue(provider.contains("exception"), "未配置的filter沿用自身默认（开）: " + provider);
+        assertTrue(provider.contains("idempotent"), "提供侧幂等去重默认开启: " + provider);
+        assertFalse(provider.contains("idempotency"), "幂等键生成只跑消费侧: " + provider);
+        assertFalse(provider.contains("trace"), "trace只跑消费侧（提供侧上下文还原在RpcRequestHandler）: " + provider);
         assertFalse(provider.contains("activelimit"), "未配置的filter沿用自身默认（关）: " + provider);
     }
 
@@ -54,6 +56,8 @@ class FilterLoaderConfigTest {
 
         assertFalse(consumer.contains("metrics"), "配置源移除后应回到默认（关）: " + consumer);
         assertTrue(consumer.contains("accesslog"), "默认开启的filter应回来: " + consumer);
+        assertTrue(consumer.contains("trace"), "消费侧追踪默认开启: " + consumer);
+        assertTrue(consumer.contains("idempotency"), "消费侧幂等键生成默认开启: " + consumer);
     }
 
     private static ConduitConfig.Source withProperties(Map<String, String> properties) {

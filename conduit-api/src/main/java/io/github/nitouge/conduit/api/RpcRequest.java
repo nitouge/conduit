@@ -126,6 +126,18 @@ public class RpcRequest implements Serializable {
         attachments.put(key, value);
     }
 
+    /**
+     * 移除单个附加参数（key不存在时无副作用）。
+     *
+     * <p>用于「本跳不应该继承上游某个字段」的场景：例如链路上每跳都会换新的 spanId 与 parentSpanId，
+     * 根调用必须把上游残留的 parentSpanId 摘掉，而不是留着一个指向不存在父节点的脏值。</p>
+     */
+    public void removeAttachment(String key) {
+        if (attachments != null && key != null) {
+            attachments.remove(key);
+        }
+    }
+
     @Override
     public String toString() {
         return "RpcRequest{" +

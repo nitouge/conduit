@@ -164,12 +164,14 @@ conduit.registry.type: local
 | `conduit.protocol.serialization` | 序列化方式 | `jdk` / `json` / `kryo`(生产推荐) / `protostuff` |
 | `conduit.protocol.compress` | 压缩算法（达到阈值才真正压缩） | `none`(默认) / `gzip` |
 | `conduit.transport.max-connections-per-address` | 每地址连接数上限（连接池） | 默认 `1`（单长连接复用） |
+| `conduit.transport.max-in-flight-per-connection` | 每连接在途请求上限（写背压，超限快速失败） | 默认 `1024` |
 | `conduit.transport.heartbeat-interval-ms` | 心跳间隔，`0` 关闭 | 默认 `30000` |
 | `conduit.transport.reconnect.enabled` | 断线后台自动重连 | 默认 `true` |
 | `conduit.transport.tls.enabled` | 链路加密（TLS） | 默认 `false` |
 | `conduit.registry.type` | 注册中心类型 | `nacos`(默认) / `local` / `zookeeper` / `etcd` |
 | `conduit.protocol.weight` | 服务节点权重 | 默认 `100` |
-| `conduit.filter.trace.enabled` | traceId自动生成/透传/MDC | 默认 `true` |
+| `conduit.filter.trace.enabled` | traceId/spanId 自动生成、透传与 MDC 绑定 | 默认 `true` |
+| `conduit.trace.sample-rate` | 追踪采样率（按 traceId 确定性哈希） | 默认 `1.0`（全采） |
 | `conduit.filter.metrics.enabled` | QPS/RT/错误率/延迟分布指标 | 默认 `false` |
 | `conduit.filter.structuredlog.enabled` | JSON结构化访问日志 | 默认 `false` |
 | `conduit.filter.accesslog.enabled` | 文本访问日志（`CONDUIT.ACCESS`） | 默认 `true` |

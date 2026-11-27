@@ -37,6 +37,15 @@ public final class RpcAttachments {
     /** traceId（历史键名保持 {@code traceId} 不变，避免破坏已有日志采集规则） */
     public static final String TRACE_ID = "traceId";
 
+    /** 本跳 spanId：每经过一次远程调用换新；同时作为 MDC key 使用 */
+    public static final String SPAN_ID = "spanId";
+
+    /** 上游 spanId（发起这次调用的那个 span）；根调用没有；同时作为 MDC key 使用 */
+    public static final String PARENT_SPAN_ID = "parentSpanId";
+
+    /** 采样结论：{@code "1"} 采、{@code "0"} 不采；根调用决定一次后沿链透传 */
+    public static final String SAMPLED = "conduit.trace.sampled";
+
     /**
      * 幂等键：同一次<b>逻辑调用</b>共用一个键，服务端据此去重。
      *

@@ -28,8 +28,10 @@ public class AccessLogFilter implements Filter {
         return chain.invoke(request).whenComplete((resp, err) -> {
             long elapsed = System.currentTimeMillis() - start;
             boolean success = (err == null && (resp == null || !resp.hasException()));
-            log.info("[AccessLog] traceId={} {} - {}ms - {}",
-                    request.getAttachment(TraceContext.TRACE_ID), method, elapsed, success ? "OK" : "FAIL");
+            log.info("[AccessLog] traceId={} spanId={} {} - {}ms - {}",
+                    request.getAttachment(TraceContext.TRACE_ID),
+                    request.getAttachment(TraceContext.SPAN_ID),
+                    method, elapsed, success ? "OK" : "FAIL");
         });
     }
 

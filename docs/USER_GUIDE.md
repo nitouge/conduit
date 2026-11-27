@@ -281,6 +281,9 @@ client.close();
 | `conduit.transport.heartbeat-interval-ms` | `30000` | 心跳间隔，`0` 关闭心跳 |
 | `conduit.transport.read-idle-timeout-ms` | `90000` | 客户端读空闲探活（须大于心跳间隔），`0` 关闭 |
 | `conduit.transport.max-connections-per-address` | `1` | 每地址连接数上限（连接池容量） |
+| `conduit.transport.max-in-flight-per-connection` | `1024` | 每连接在途请求上限；超过即**背压快速失败**（见下） |
+| `conduit.transport.write-buffer-high-water-mark` | `65536` | 写缓冲高水位（字节）；超过后 channel 不可写，客户端拒绝新请求 |
+| `conduit.transport.write-buffer-low-water-mark` | `32768` | 写缓冲低水位（字节）；回落后恢复可写 |
 | `conduit.transport.idle-connection-timeout-ms` | `600000` | 闲置连接回收时长 |
 | `conduit.transport.reconnect.enabled` | `true` | 断线是否后台自动重连 |
 | `conduit.transport.reconnect.max-attempts` | `5` | 重连最大尝试次数 |
@@ -623,12 +626,14 @@ conduit:
       enabled: false
 ```
 
-- **traceId**：默认自动生成并随 `RpcRequest.attachments` 透传；可用
-  `RpcContext.getContext().setTraceId("...")` 主动指定，提供侧业务通过
-  `RpcContext.getContext().getTraceId()` 读取；日志 pattern 加 `%X{traceId}` 即可串联。
+- **traceId / spanId**：traceId 默认自动生成并随 `RpcRequest.attachments` 透传；每次远程调用
+  还会带一个新的 spanId 与 parentSpanId（父子关系随调用链延伸），采样率 `conduit.trace.sample-rate`
+  默认全采。可用 `RpcContext.getContext().setTraceId("...")` 主动指定，提供侧业务通过
+  `RpcContext.getContext().getTraceId()` 读取；日志 pattern 加 `%X{traceId}` / `%X{spanId}` 即可串联。
+  跨线程（自建线程池）用 `ContextSnapshot.capture().wrap(...)` 传播上下文。
 - **指标**：`MetricsFilter.snapshot()` 读取每个 `interface#method` 的总量/成功/失败/平均/最大/
   最小/延迟分桶与分位估算，`MetricsFilter.reset()` 重置。
-- **结构化日志**：logger `CONDUIT.ACCESS.JSON`，每调用一行 JSON（timestamp/traceId/interface/
-  method/durationMs/success[/errorType/errorMessage]）。
+- **结构化日志**：logger `CONDUIT.ACCESS.JSON`，每调用一行 JSON（timestamp/traceId/spanId/
+  parentSpanId/interface/method/durationMs/success[/errorType/errorMessage]）。
 
 > 详细行为、异步限制与配置示例见 [OBSERVABILITY.md](OBSERVABILITY.md)。

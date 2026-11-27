@@ -16,4 +16,13 @@
     <description>对外契约：核心数据模型与注解</description>
 
     <!-- 最底层契约模块：不依赖任何其它conduit模块（仅继承父POM的slf4j/junit）。 -->
+
+    <dependencies>
+        <!-- 测试用日志实现：MDC(traceId/spanId)需要真实绑定，纯slf4j-api下MDC是no-op -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

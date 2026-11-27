@@ -14,6 +14,7 @@ import io.netty.handler.ssl.SslContext;
  *   <li><b>建链</b>：TCP connect超时、握手超时；</li>
  *   <li><b>保活</b>：心跳间隔、读空闲超时（超时判定对端失联并断开）；</li>
  *   <li><b>连接池</b>：每个地址的最大连接数（默认1，即长连接复用）、闲置连接回收时长；</li>
+ *   <li><b>背压</b>：每连接在途请求上限、写缓冲高低水位（超限快速失败而不是无限堆积）；</li>
  *   <li><b>重连</b>：断线后是否后台自动重连、最大重试次数与指数退避区间；</li>
  *   <li><b>加密</b>：可选的 {@link SslContext}，非null即对该客户端的全部连接启用TLS。</li>
  * </ul>
@@ -40,6 +41,12 @@ public final class ClientOptions {
     public static final int DEFAULT_RECONNECT_BASE_DELAY_MILLIS = 1_000;
     /** 默认重连最大退避时长 */
     public static final int DEFAULT_RECONNECT_MAX_DELAY_MILLIS = 30_000;
+    /** 默认每连接在途请求上限：超过即快速失败，防止服务端变慢时客户端无限堆积 */
+    public static final int DEFAULT_MAX_IN_FLIGHT_PER_CONNECTION = 1024;
+    /** 默认写缓冲高水位（字节）：超过后channel不再writable，客户端开始拒绝新请求 */
+    public static final int DEFAULT_WRITE_BUFFER_HIGH_WATER_MARK = 64 * 1024;
+    /** 默认写缓冲低水位（字节）：回落到该值以下后channel恢复writable */
+    public static final int DEFAULT_WRITE_BUFFER_LOW_WATER_MARK = 32 * 1024;
 
     private final byte codec;
     private final byte compress;
@@ -54,6 +61,9 @@ public final class ClientOptions {
     private final int reconnectMaxAttempts;
     private final long reconnectBaseDelayMillis;
     private final long reconnectMaxDelayMillis;
+    private final int maxInFlightPerConnection;
+    private final int writeBufferHighWaterMark;
+    private final int writeBufferLowWaterMark;
     private final SslContext sslContext;
 
     private ClientOptions(Builder builder) {
@@ -70,6 +80,9 @@ public final class ClientOptions {
         this.reconnectMaxAttempts = builder.reconnectMaxAttempts;
         this.reconnectBaseDelayMillis = builder.reconnectBaseDelayMillis;
         this.reconnectMaxDelayMillis = builder.reconnectMaxDelayMillis;
+        this.maxInFlightPerConnection = builder.maxInFlightPerConnection;
+        this.writeBufferHighWaterMark = builder.writeBufferHighWaterMark;
+        this.writeBufferLowWaterMark = builder.writeBufferLowWaterMark;
         this.sslContext = builder.sslContext;
     }
 
@@ -147,6 +160,21 @@ public final class ClientOptions {
         return reconnectMaxDelayMillis;
     }
 
+    /** 每连接允许的在途请求数上限（超过即快速失败） */
+    public int getMaxInFlightPerConnection() {
+        return maxInFlightPerConnection;
+    }
+
+    /** 写缓冲高水位（字节）：channel 不可写后客户端拒绝新请求 */
+    public int getWriteBufferHighWaterMark() {
+        return writeBufferHighWaterMark;
+    }
+
+    /** 写缓冲低水位（字节）：回落到该值以下后 channel 恢复可写 */
+    public int getWriteBufferLowWaterMark() {
+        return writeBufferLowWaterMark;
+    }
+
     public SslContext getSslContext() {
         return sslContext;
     }
@@ -167,6 +195,9 @@ public final class ClientOptions {
                 ", reconnectMaxAttempts=" + reconnectMaxAttempts +
                 ", reconnectBaseDelayMillis=" + reconnectBaseDelayMillis +
                 ", reconnectMaxDelayMillis=" + reconnectMaxDelayMillis +
+                ", maxInFlightPerConnection=" + maxInFlightPerConnection +
+                ", writeBufferHighWaterMark=" + writeBufferHighWaterMark +
+                ", writeBufferLowWaterMark=" + writeBufferLowWaterMark +
                 ", tls=" + (sslContext != null) +
                 '}';
     }
@@ -187,6 +218,9 @@ public final class ClientOptions {
         private int reconnectMaxAttempts = DEFAULT_RECONNECT_MAX_ATTEMPTS;
         private long reconnectBaseDelayMillis = DEFAULT_RECONNECT_BASE_DELAY_MILLIS;
         private long reconnectMaxDelayMillis = DEFAULT_RECONNECT_MAX_DELAY_MILLIS;
+        private int maxInFlightPerConnection = DEFAULT_MAX_IN_FLIGHT_PER_CONNECTION;
+        private int writeBufferHighWaterMark = DEFAULT_WRITE_BUFFER_HIGH_WATER_MARK;
+        private int writeBufferLowWaterMark = DEFAULT_WRITE_BUFFER_LOW_WATER_MARK;
         private SslContext sslContext;
 
         private Builder() {
@@ -274,6 +308,27 @@ public final class ClientOptions {
             return this;
         }
 
+        /**
+         * 每连接允许的在途请求数上限：达到上限后新请求<b>快速失败</b>而不是继续堆积。
+         *
+         * <p>这是客户端侧的背压阀：服务端变慢时，请求会先堆在写缓冲、再堆在在途表，最后把客户端
+         * 自己的内存打满。提前拒绝比 OOM/超时雪崩好得多。</p>
+         */
+        public Builder maxInFlightPerConnection(int maxInFlightPerConnection) {
+            this.maxInFlightPerConnection = maxInFlightPerConnection;
+            return this;
+        }
+
+        /**
+         * 写缓冲高/低水位（字节）：出站缓冲超过高水位后 channel 变为不可写，客户端开始拒绝新请求；
+         * 回落到低水位以下恢复可写。
+         */
+        public Builder writeBufferWaterMark(int lowWaterMark, int highWaterMark) {
+            this.writeBufferLowWaterMark = lowWaterMark;
+            this.writeBufferHighWaterMark = highWaterMark;
+            return this;
+        }
+
         public ClientOptions build() {
             if (connectTimeoutMillis <= 0) {
                 throw new IllegalArgumentException("connectTimeoutMillis必须为正数: " + connectTimeoutMillis);
@@ -311,6 +366,17 @@ public final class ClientOptions {
             }
             if (compressThreshold < 0) {
                 throw new IllegalArgumentException("compressThreshold不能为负数: " + compressThreshold);
+            }
+            if (maxInFlightPerConnection < 1) {
+                throw new IllegalArgumentException("maxInFlightPerConnection必须>=1: " + maxInFlightPerConnection);
+            }
+            if (writeBufferLowWaterMark <= 0 || writeBufferHighWaterMark <= 0) {
+                throw new IllegalArgumentException("写缓冲水位必须为正数: low=" + writeBufferLowWaterMark
+                        + ", high=" + writeBufferHighWaterMark);
+            }
+            if (writeBufferHighWaterMark <= writeBufferLowWaterMark) {
+                throw new IllegalArgumentException("writeBufferHighWaterMark(" + writeBufferHighWaterMark
+                        + ")必须大于lowWaterMark(" + writeBufferLowWaterMark + ")，否则channel会永远不可写");
             }
             return new ClientOptions(this);
         }

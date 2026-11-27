@@ -126,6 +126,23 @@ public final class ConduitConfig {
     }
 
     /**
+     * 读取浮点配置（如采样率 0.0~1.0）；未配置或值非法时返回 {@code defaultValue}。
+     *
+     * <p>不在这里做区间裁剪：取值域由各配置项自己定义并校验（如采样率允许 0~1，其他项可能允许任意正数）。</p>
+     */
+    public static double getDouble(String key, double defaultValue) {
+        String value = get(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
      * 配置项名 → 环境变量名：小写点分键转大写下划线，例如 {@code a.b-c} → {@code A_B_C}
      */
     static String envKey(String key) {

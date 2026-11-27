@@ -96,6 +96,20 @@
     两者默认启用，`conduit.filter.idempotency.enabled` / `conduit.filter.idempotent.enabled=false` 可关闭。
   - `ConduitConfig` 增加 `getPositiveLong`；filter 开关表、SPI 扩展点清单与 [CLUSTER.md](docs/CLUSTER.md) 同步更新。
 
+- **追踪 span 化 + 客户端写背压（Governance / Transport）**：
+  - 追踪从"只有 traceId"升级为 **span 模型**：每跳新建 `spanId`、`parentSpanId` 取本线程正在服务的
+    span（服务内部再调下游时父子关系自然延伸）；`conduit.trace.sample-rate` 按 traceId **确定性哈希**
+    采样，结论（`conduit.trace.sampled`）沿链透传，避免半截链路；MDC 同步绑定三元组，
+    文本访问日志与 JSON 访问日志都输出 `spanId`/`parentSpanId`。
+  - `RpcRequestHandler` 把上下文还原提前到请求边界（Filter 链之前），提供侧 Filter 也能读到链路上下文。
+  - 新增 `ContextSnapshot`：跨线程传播 `RpcContext` 与 MDC（`capture/wrap/run/call`）；
+    消费侧异步调用的结果在发起线程的上下文快照里完成，调用方的 `thenApply/thenAccept` 不再丢 traceId。
+  - 新增客户端**写背压**：写之前过闸——单连接在途请求上限（`max-in-flight-per-connection`，默认 1024）
+    + channel 可写性（写缓冲高低水位，默认 64KB/32KB），超限立即 `RpcException("背压：...")` 快速失败，
+    并计入 `NettyClient.getBackpressureRejections()`；此前服务端变慢只会让客户端无限堆积。
+  - `RpcRequest` 增加 `removeAttachment`；`ConduitConfig` 增加 `getDouble`；
+    文档同步 [TRANSPORT.md](docs/TRANSPORT.md) §7 写背压、[OBSERVABILITY.md](docs/OBSERVABILITY.md) §1。
+
 ### Docs
 
 - 补齐开源基础文档：`LICENSE`（Apache-2.0）、`CONTRIBUTING.md`、`CHANGELOG.md`。

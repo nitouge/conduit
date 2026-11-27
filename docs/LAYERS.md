@@ -73,7 +73,7 @@ RPC 框架的知识可以按"解决什么问题"分成三层，逐层递进：
 | 熔断 | `CircuitBreaker` + `CircuitBreakerRegistry` | 节点级三态（CLOSED/OPEN/HALF_OPEN）、阈值/打开时长可配；`state()` 可观测 | `CircuitBreakerTest`、`MultiNodeClusterIntegrationTest.breakerOpensAndFailsFastAfterRepeatedFailures` |
 | 限流 | `RateLimitFilter`（令牌桶）+ `ActiveLimitFilter`（信号量并发隔离） | QPS 与并发两个维度分开挡：令牌桶挡瞬时尖峰（方法级 + 全局限额），信号量挡在途堆积；两者都**快速失败**而不是排队 | `RateLimitFilterTest`、`GovernanceFiltersIntegrationTest.qpsLimitRejectsExcessRequestsFast` |
 | 重试与幂等 | 重试 ✅ / 幂等 ✅（`IdempotencyFilter` + `IdempotentFilter`） | 消费侧给每次**逻辑调用**生成幂等键（重放复用同一个键），提供侧按键去重：已完成直接返回缓存、执行中挂同一个 future、失败不缓存；去重表按 TTL/条目数封顶且**仅进程内**（跨节点重复需集中式存储） | `IdempotencyFilterTest`、`IdempotentFilterTest`、`GovernanceFiltersIntegrationTest.sameIdempotencyKeyExecutesOnceAcrossRepeatedRequests` |
-| 链路追踪 | `TraceFilter` + `RpcContext` + MDC | traceId 自动生成、随 attachments 跨进程透传、写入 MDC；访问日志/JSON 日志带 traceId | `TraceFilterTest`、`ObservabilityE2ETest` |
+| 链路追踪 | `TraceFilter` + `TraceContext` + `ContextSnapshot` + MDC | traceId 跨进程不变；每次发起调用新建 spanId、父节点取本线程正在服务的 span（父子关系随链路延伸）；采样率按 traceId 确定性哈希、结论沿链透传；`ContextSnapshot` 支持异步线程显式传播；MDC 带 traceId/spanId/parentSpanId | `TraceFilterTest`、`TraceContextTest`、`ContextSnapshotTest`、`TracePropagationIntegrationTest` |
 | 指标 | `MetricsFilter` | 按 `interface#method` 统计 QPS/成功率/RT/延迟分桶与分位估算 | `MetricsFilterTest` |
 | 结构化日志 | `StructuredLogFilter` | 一行 JSON（`CONDUIT.ACCESS.JSON`），便于采集 | `StructuredLogFilterTest` |
 
@@ -136,9 +136,18 @@ mvn -pl conduit-it -am test -Dit.distributed=true   # 多JVM + Nacos 分布式�
 
 ---
 
-## 三层视角下的缺口（下一步优先级）
+## 三层视角下的缺口
 
-| 层 | 缺口 | 影响 | 建议 |
+原先盘点的六项缺口已全部落地：
+
+| 层 | 缺口 | 落地方式 | 验证 |
 | --- | --- | --- | --- |
-| Governance | 追踪 span 化 | 只有 traceId，没有 span/父子关系/采样 | 引入 spanId + 采样率；异步线程上下文传播 |
-| Transport | 客户端写背压 | 服务端变慢时客户端可能堆积在途请求 | 基于 channel writability 的水位控制 + 在途上限快速失败 |
+| Invocation | 请求取消与 deadline | `TYPE_CANCEL` 控制帧 + `ServerCallRegistry` + `RpcAttachments.DEADLINE` | `CancelDeadlineIntegrationTest` |
+| Governance | 路由规则 | `Router` SPI：version/group/tag 硬过滤、zone 软优先 | `DefaultRouterTest`、`RoutingIntegrationTest` |
+| Governance | QPS 限流 | `RateLimitFilter` 令牌桶（方法级 + 全局限额） | `RateLimitFilterTest`、`GovernanceFiltersIntegrationTest` |
+| Governance | 重试幂等 | `IdempotencyFilter`（发键）+ `IdempotentFilter`（服务端去重） | `IdempotentFilterTest`、`GovernanceFiltersIntegrationTest` |
+| Governance | 追踪 span 化与采样 | spanId/parentSpanId + 确定性采样 + `ContextSnapshot` | `TracePropagationIntegrationTest` |
+| Transport | 客户端写背压 | 在途上限 + channel 可写性闸门，超限快速失败 | `BackpressureIntegrationTest` |
+
+后续可选增强（已不属于"缺口"）：集中式限流/去重（Redis）、把 span 上报到 OpenTelemetry、
+跨节点的全局幂等保证。

@@ -183,6 +183,27 @@ B 给 C 的 deadline = min(T+1000, T_B+1000)
   （默认 10 分钟；保留 `minIdle=0` 条）。
 - 连接关闭即从池中移除，并通知重连管理器。
 
+### 客户端写背压（服务端变慢时会怎样）
+
+服务端变慢时，请求不会凭空消失，只会在客户端**换一个地方堆积**：先堆在 Netty 的出站缓冲，
+再堆在在途请求表，最后把客户端自己的内存吃干净——而且这些请求大概率已经超时，纯属浪费。
+
+所以写之前先过一道闸：
+
+| 指标 | 判据 | 说明 |
+| --- | --- | --- |
+| 在途请求数 | `inFlight >= max-in-flight-per-connection`（默认 1024） | 服务端处理慢时在途表只增不减，是最直接的堆积来源 |
+| channel 可写性 | `!channel.isWritable()` | 出站缓冲超过 `write-buffer-high-water-mark`（默认 64KB）后为 false，说明对端读得慢/TCP 窗口打满 |
+
+- 任一条件触发 → **不写出**、立刻以 `RpcException("背压：...")` 失败，并计入
+  `NettyClient.getBackpressureRejections()`；调用方可以马上决策（降级/熔断/换节点），
+  而不是陪跑到超时；
+- 水位回落（低于 low watermark，默认 32KB）后 channel 恢复可写，自动恢复接收；
+- 背压拒绝是**普通传输失败**：failover 会按既有语义换节点重试（受 `retries` 约束），
+  不想重试就用 `failfast`；
+- 两个阈值都可通过 `ClientOptions.maxInFlightPerConnection(...)` /
+  `writeBufferWaterMark(low, high)` 或 `application.yml` 的 `conduit.transport.*` 调整。
+
 ---
 
 ## 8. 断线自动重连
@@ -290,3 +311,4 @@ new RpcServer(host, port, serverOptions);
    "业务帧类型校验"，否则新增控制帧会被当成非法类型直接断链。
 9. 服务端每个在途请求必须在 完成/cancel 帧/deadline 三条路径上都从 `ServerCallRegistry` 移除；
    业务线程归还线程池前必须清掉中断标记。
+10. 客户端写出前必须过背压闸门（在途上限 + channel 可写性）；拒绝要立刻失败、且不得登记在途条目。

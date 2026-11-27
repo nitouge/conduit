@@ -22,6 +22,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -60,7 +61,8 @@ import java.util.concurrent.atomic.LongAdder;
  * <ol>
  *   <li>生成全局requestId，登记到 {@link PendingRequests} 并挂上超时清理任务；</li>
  *   <li>向 {@link ConnectionPool} 要一条该地址的<b>已握手</b>连接（没有就建，建链单飞）；</li>
- *   <li>把requestId登记到该连接的在途集合，用协商出的version/codec/compress编码请求帧写出；</li>
+ *   <li>把requestId登记到该连接的在途集合，用协商出的version/codec/compress编码请求帧写出；
+ *   <b>写之前先过背压阀</b>（在途上限 + channel 可写性），服务端变慢时快速失败而不是无限堆积；</li>
  *   <li>响应到达时由 {@link NettyClientHandler} 按requestId唤醒future；</li>
  *   <li>超时或调用方放弃时，在清理在途表的同时给对端发一帧 CANCEL（让服务端别白跑）；</li>
  *   <li>连接断开时在途请求统一失败并触发后台重连。</li>
@@ -99,6 +101,8 @@ public class NettyClient implements AutoCloseable {
     private final LongAdder heartbeatsSent = new LongAdder();
     private final LongAdder heartbeatsReceived = new LongAdder();
     private final LongAdder responsesReceived = new LongAdder();
+    /** 因背压（在途上限/写缓冲水位）被拒绝的请求数：持续增长说明客户端正在被压垮 */
+    private final LongAdder backpressureRejections = new LongAdder();
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /** 默认配置（jdk序列化、无压缩、单连接、心跳30s、断线重连开启） */
@@ -148,6 +152,9 @@ public class NettyClient implements AutoCloseable {
                 .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
                         (int) Math.min(Integer.MAX_VALUE, options.getConnectTimeoutMillis()))
+                // 写缓冲水位：超过高水位后 channel 变不可写，客户端据此拒绝新请求（写背压）
+                .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(
+                        options.getWriteBufferLowWaterMark(), options.getWriteBufferHighWaterMark()))
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
@@ -262,6 +269,16 @@ public class NettyClient implements AutoCloseable {
                 inFlight(channel).remove(requestId);
                 return;
             }
+            // 背压阀：服务端变慢时，请求会先堆写缓冲、再堆在途表，最后把客户端内存打满。
+            // 与其无限堆积，不如立刻拒绝——调用方还能立刻决策（降级/重试/熔断），而不是等着超时。
+            String rejection = backpressureReason(channel);
+            if (rejection != null) {
+                backpressureRejections.increment();
+                log.warn("[NettyClient] 背压拒绝 requestId={}, target={}:{}: {}",
+                        requestId, target.getHost(), target.getPort(), rejection);
+                PendingRequests.completeExceptionally(requestId, new RpcException(rejection));
+                return;
+            }
             channelRef.set(channel);
             inFlight(channel).add(requestId);
             // 缩小时序窗口：登记在途后再次确认请求是否已被超时清理，避免留下"僵尸在途条目"
@@ -289,6 +306,31 @@ public class NettyClient implements AutoCloseable {
             });
         });
         return future;
+    }
+
+    /**
+     * 判断这条连接现在还能不能接新请求（写背压）。
+     *
+     * <p>两个水位指标：</p>
+     * <ul>
+     *   <li><b>在途请求数</b>：服务端处理慢时，在途表只增不减，这是最直接的堆积来源；</li>
+     *   <li><b>channel 可写性</b>：Netty 出站缓冲超过高水位后 {@code isWritable()} 为 false，
+     *       说明对端读得慢/TCP 发送窗口打满，再写只会继续占内存。</li>
+     * </ul>
+     *
+     * @return 拒绝原因；{@code null} 表示可以发送
+     */
+    private String backpressureReason(Channel channel) {
+        int inFlight = inFlight(channel).size();
+        int limit = options.getMaxInFlightPerConnection();
+        if (inFlight >= limit) {
+            return "背压：单连接在途请求已达上限(" + inFlight + "/" + limit + ")，快速失败";
+        }
+        if (!channel.isWritable()) {
+            return "背压：写缓冲超过高水位(" + options.getWriteBufferHighWaterMark()
+                    + "字节)，对端消费变慢，快速失败";
+        }
+        return null;
     }
 
     /**
@@ -390,6 +432,11 @@ public class NettyClient implements AutoCloseable {
 
     public long getResponsesReceived() {
         return responsesReceived.sum();
+    }
+
+    /** 因背压（在途上限/写缓冲水位）被拒绝的请求数 */
+    public long getBackpressureRejections() {
+        return backpressureRejections.sum();
     }
 
     public ClientOptions getOptions() {

@@ -88,8 +88,8 @@
 - [x] 路由规则 `M` — `ServiceMeta` 增加 version/group/tag/zone 并随注册中心发布（Nacos metadata / ZK 节点数据 / Etcd value）；新增 `Router` SPI，`discover → route → loadbalance`：version/group/tag 硬过滤、zone 软优先，硬过滤为空直接报错；`@RpcService`/`@RpcReference` 与 `RpcContext` attachment 双向支持
 - [x] QPS 限流 `S` — 新增 `RateLimitFilter`（令牌桶：方法级 + 全局限额，qps/burst 可配），与 `ActiveLimitFilter` 分工为「挡瞬时尖峰 / 挡在途堆积」，均快速失败；提供侧生效
 - [x] 重试幂等 `M` — 消费侧 `IdempotencyFilter` 为每次逻辑调用生成幂等键（failover 重放复用同一个键），提供侧 `IdempotentFilter` 按键去重（已完成返回缓存、执行中挂同一 future、失败不缓存，TTL/条目数封顶）；去重表是进程内的，跨节点重复仍需集中式存储
-- [ ] 追踪 span 化与采样 `M` — 只有 traceId，缺 spanId/父子关系/采样率，异步线程上下文也未传播
-- [ ] 客户端写背压 `S` — 服务端变慢时缺少基于 channel writability 的在途水位控制与快速失败
+- [x] 追踪 span 化与采样 `M` — 每跳新建 `spanId`、`parentSpanId` 取本线程正在服务的 span（父子关系跨服务延伸）；`conduit.trace.sample-rate` 按 traceId 确定性哈希采样、结论沿链透传；新增 `ContextSnapshot` 支持异步线程显式传播，消费侧异步回调自动带上下文；MDC 绑定 traceId/spanId/parentSpanId，文本/JSON 访问日志均输出 spanId
+- [x] 客户端写背压 `S` — 写之前过闸：单连接在途请求上限（默认 1024）+ channel 可写性（写缓冲高低水位，默认 64KB/32KB），超限立即 `RpcException("背压：...")` 快速失败并计入 `getBackpressureRejections()`，不再无限堆积
 
 ---
 

@@ -42,6 +42,9 @@ class TransportConfigBindingTest {
                         "conduit.transport.read-idle-timeout-ms=9999",
                         "conduit.transport.max-connections-per-address=3",
                         "conduit.transport.idle-connection-timeout-ms=4444",
+                        "conduit.transport.max-in-flight-per-connection=55",
+                        "conduit.transport.write-buffer-high-water-mark=131072",
+                        "conduit.transport.write-buffer-low-water-mark=65536",
                         "conduit.transport.reconnect.enabled=false",
                         "conduit.transport.reconnect.max-attempts=7",
                         "conduit.transport.reconnect.base-delay-ms=555",
@@ -70,6 +73,9 @@ class TransportConfigBindingTest {
             assertEquals(9999, options.getReadIdleTimeoutMillis());
             assertEquals(3, options.getMaxConnectionsPerAddress());
             assertEquals(4444, options.getIdleConnectionTimeoutMillis());
+            assertEquals(55, options.getMaxInFlightPerConnection());
+            assertEquals(131072, options.getWriteBufferHighWaterMark());
+            assertEquals(65536, options.getWriteBufferLowWaterMark());
             assertFalse(options.isReconnectEnabled());
             assertEquals(7, options.getReconnectMaxAttempts());
             assertEquals(555, options.getReconnectBaseDelayMillis());

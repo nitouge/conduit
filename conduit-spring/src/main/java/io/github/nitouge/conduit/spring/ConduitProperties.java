@@ -120,6 +120,8 @@ public class ConduitProperties {
                 .readIdleTimeoutMillis(t.getReadIdleTimeoutMs())
                 .maxConnectionsPerAddress(t.getMaxConnectionsPerAddress())
                 .idleConnectionTimeoutMillis(t.getIdleConnectionTimeoutMs())
+                .maxInFlightPerConnection(t.getMaxInFlightPerConnection())
+                .writeBufferWaterMark(t.getWriteBufferLowWaterMark(), t.getWriteBufferHighWaterMark())
                 .reconnectEnabled(reconnect.isEnabled())
                 .reconnectMaxAttempts(reconnect.getMaxAttempts())
                 .reconnectBaseDelayMillis(reconnect.getBaseDelayMs())
@@ -307,6 +309,9 @@ public class ConduitProperties {
         private long readIdleTimeoutMs = ClientOptions.DEFAULT_READ_IDLE_TIMEOUT_MILLIS;
         private int maxConnectionsPerAddress = ClientOptions.DEFAULT_MAX_CONNECTIONS_PER_ADDRESS;
         private long idleConnectionTimeoutMs = ClientOptions.DEFAULT_IDLE_CONNECTION_TIMEOUT_MILLIS;
+        private int maxInFlightPerConnection = ClientOptions.DEFAULT_MAX_IN_FLIGHT_PER_CONNECTION;
+        private int writeBufferHighWaterMark = ClientOptions.DEFAULT_WRITE_BUFFER_HIGH_WATER_MARK;
+        private int writeBufferLowWaterMark = ClientOptions.DEFAULT_WRITE_BUFFER_LOW_WATER_MARK;
         private final ReconnectConfig reconnect = new ReconnectConfig();
         private final ServerConfig server = new ServerConfig();
         private final TlsConfig tls = new TlsConfig();
@@ -357,6 +362,30 @@ public class ConduitProperties {
 
         public void setIdleConnectionTimeoutMs(long idleConnectionTimeoutMs) {
             this.idleConnectionTimeoutMs = idleConnectionTimeoutMs;
+        }
+
+        public int getMaxInFlightPerConnection() {
+            return maxInFlightPerConnection;
+        }
+
+        public void setMaxInFlightPerConnection(int maxInFlightPerConnection) {
+            this.maxInFlightPerConnection = maxInFlightPerConnection;
+        }
+
+        public int getWriteBufferHighWaterMark() {
+            return writeBufferHighWaterMark;
+        }
+
+        public void setWriteBufferHighWaterMark(int writeBufferHighWaterMark) {
+            this.writeBufferHighWaterMark = writeBufferHighWaterMark;
+        }
+
+        public int getWriteBufferLowWaterMark() {
+            return writeBufferLowWaterMark;
+        }
+
+        public void setWriteBufferLowWaterMark(int writeBufferLowWaterMark) {
+            this.writeBufferLowWaterMark = writeBufferLowWaterMark;
         }
 
         public ReconnectConfig getReconnect() {

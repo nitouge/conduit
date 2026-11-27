@@ -44,13 +44,16 @@ class FilterSwitchConfigTest {
         assertTrue(provider.contains("metrics"), "metrics=true应启用: " + provider);
         assertTrue(provider.contains("structuredlog"), "structuredlog=true应启用: " + provider);
         assertFalse(provider.contains("accesslog"), "accesslog=false应禁用: " + provider);
-        assertTrue(provider.contains("trace"), "未配置的filter沿用自身默认: " + provider);
         assertTrue(provider.contains("exception"), "提供侧异常filter默认仍启用: " + provider);
+        assertTrue(provider.contains("idempotent"), "提供侧幂等去重默认开启: " + provider);
+        // trace 只跑消费侧：提供侧的上下文还原在 RpcRequestHandler 的请求边界完成
+        assertFalse(provider.contains("trace"), "trace只作用于消费侧: " + provider);
 
         Set<String> consumer = names(FilterLoader.load(Side.CONSUMER));
         assertTrue(consumer.contains("metrics"), "消费侧同样读到配置: " + consumer);
         assertFalse(consumer.contains("accesslog"), "消费侧同样读到配置: " + consumer);
         assertFalse(consumer.contains("exception"), "exception只作用于提供侧: " + consumer);
+        assertTrue(consumer.contains("trace"), "trace在消费侧默认开启: " + consumer);
     }
 
     @AfterAll

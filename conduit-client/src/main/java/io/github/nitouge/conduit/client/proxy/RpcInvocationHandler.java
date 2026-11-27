@@ -1,5 +1,6 @@
 package io.github.nitouge.conduit.client.proxy;
 
+import io.github.nitouge.conduit.api.ContextSnapshot;
 import io.github.nitouge.conduit.api.RpcAttachments;
 import io.github.nitouge.conduit.api.RpcContext;
 import io.github.nitouge.conduit.api.RpcRequest;
@@ -30,7 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -193,6 +193,9 @@ public class RpcInvocationHandler implements InvocationHandler {
         request.setMethodName(method.getName());
         request.setParamTypes(method.getParameterTypes());
         request.setArgs(args);
+        boolean async = method.getReturnType() == CompletableFuture.class;
+        // 异步：先把发起线程的上下文做快照——RpcContext被清空后，回调线程只能靠快照拿回trace/span
+        ContextSnapshot snapshot = async ? ContextSnapshot.capture() : null;
         // 把当前线程RpcContext的attachments拷入请求，随即清空（一次性语义，
         // 防止泄漏到同线程下次调用）。拷贝而非引用，避免请求持有可变上下文。
         Map<String, String> attachments = RpcContext.getContext().getAttachments();
@@ -205,7 +208,6 @@ public class RpcInvocationHandler implements InvocationHandler {
         // deadline：min(上游已带来的deadline, now+本引用超时)，随请求下发；下游据此到点自我中断
         RpcAttachments.applyDeadline(request, timeoutMillis, System.currentTimeMillis());
 
-        boolean async = method.getReturnType() == CompletableFuture.class;
         log.debug("[RpcInvocationHandler] 发起调用 {}#{}, mode={}, {}={}, attachments={}",
                 interfaceClass.getName(), method.getName(),
                 async ? "ASYNC" : "SYNC",
@@ -215,7 +217,7 @@ public class RpcInvocationHandler implements InvocationHandler {
 
         // 异步：方法返回CompletableFuture<T> → 不阻塞，直接返回future
         if (async) {
-            return invokeAsync(request);
+            return invokeAsync(request, snapshot);
         }
         return invokeSync(request, method);
     }
@@ -274,17 +276,26 @@ public class RpcInvocationHandler implements InvocationHandler {
      * 阻塞展开。之前版本这里绕开了Cluster（只做选址+sendAsync，没有容错重试）；统一之后
      * 异步调用也享有与同步一致的FailOver/熔断等集群容错语义。
      *
-     * <p>映射用thenApplyAsync切到回调线程池，避免在Netty I/O线程上跑用户后续回调。</p>
+     * <p><b>上下文传播</b>：结果映射切到回调线程池执行，并<b>在发起线程的上下文快照里完成</b>这
+     * 个 future——于是调用方随后注册的 {@code thenApply/thenAccept} 都在该上下文下同步执行，
+     * 日志里的 traceId/spanId 不会因为是异步调用就丢掉。</p>
      */
-    private CompletableFuture<Object> invokeAsync(RpcRequest request) {
+    private CompletableFuture<Object> invokeAsync(RpcRequest request, ContextSnapshot snapshot) {
         FilterChain chain = FilterChainBuilder.build(consumerFilters, terminal());
+        CompletableFuture<Object> result = new CompletableFuture<>();
 
-        return chain.invoke(request).thenApplyAsync(response -> {
-            if (response.hasException()) {
-                throw new CompletionException(response.getException());
+        chain.invoke(request).whenCompleteAsync(snapshot.wrap((response, error) -> {
+            if (error != null) {
+                result.completeExceptionally(error);
+            } else if (response == null) {
+                result.completeExceptionally(new RpcException("异步调用返回null响应"));
+            } else if (response.hasException()) {
+                result.completeExceptionally(response.getException());
+            } else {
+                result.complete(response.getData());
             }
-            return response.getData();
-        }, CALLBACK_POOL);
+        }), CALLBACK_POOL);
+        return result;
     }
 
     /**
