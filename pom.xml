@@ -28,7 +28,10 @@
         <module>conduit-client</module>
         <module>conduit-spring</module>
         <module>conduit-spring-boot-starter</module>
+        <module>conduit-testkit</module>
         <module>conduit-example</module>
+        <module>conduit-it</module>
+        <module>conduit-benchmark</module>
     </modules>
 
     <properties>
@@ -145,6 +148,12 @@
             <dependency>
                 <groupId>io.github.nitouge</groupId>
                 <artifactId>conduit-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.github.nitouge</groupId>
+                <artifactId>conduit-testkit</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -297,6 +306,31 @@
 
         <!-- Resolve ${revision} in published POMs while keeping source POMs CI-friendly. -->
         <plugins>
+            <!-- 前置校验运行Maven的JDK：项目用release=17编译，若Maven跑在低版本JDK上，
+                 测试阶段只会抛出难懂的 "class file version 61.0 ... up to 52.0"。这里提前给出明确提示。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.4.1</version>
+                <executions>
+                    <execution>
+                        <id>enforce-jdk</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[17,)</version>
+                                    <message>Conduit需要JDK 17+：请把JAVA_HOME指向JDK 17</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>

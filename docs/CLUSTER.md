@@ -1,26 +1,77 @@
 # Conduit 集群容错（Cluster）
 
 `conduit-cluster` 回答三个问题：选哪个节点（`LoadBalancer`）、失败怎么办（`Cluster`）、
-不健康节点要不要先不打（`CircuitBreaker`）。本文件说明 v0.2 新增的**可配置重试/退避**与
-**熔断器参数配置**。
+不健康节点要不要先不打（`CircuitBreaker`）。
 
----
-
-## 1. 调用链位置
-
-```
+```text
 RpcInvocationHandler
   └─ Cluster（自适应代理，默认来自 @RpcReference / conduit.cluster.*）
        ├─ LoadBalancer.select(...)        # 自适应代理，支持单次覆盖
        └─ AbstractCluster.callWithBreaker # 节点级熔断闸门
-            └─ RemoteInvoker             # 真正的远程调用
+            └─ RemoteInvoker             # 真正的远程调用（由 conduit-client 注入）
 ```
 
-只有**传输层异常**（future 异常完成）才触发容错；业务异常包在正常完成的 `RpcResponse` 里返回。
+**模块边界**：`cluster` 只依赖 `api/common/registry`，**不依赖 `remoting`**——真正发请求的能力由
+`conduit-client` 通过 `RemoteInvoker` 回调注入（`CompletableFuture<RpcResponse> invoke(ServiceMeta target, RpcRequest request)`），
+这样下层保持纯净，也便于单测替换成假 invoker。
+
+只有**传输层异常**（future 异常完成）才触发容错；业务异常包在正常完成的 `RpcResponse` 里返回，
+不会被重试。
 
 ---
 
-## 2. 配置方式
+## 1. LoadBalancer：从多个节点里选一个
+
+| 名称 | 策略 | 权重 | 是否粘住同一节点 | 适用场景 |
+| --- | --- | --- | --- | --- |
+| `random`（默认） | 加权随机 | 是（`ServiceMeta.weight`，默认 100） | 否 | 简单、长期均衡；机器配置不一可调权重 |
+| `roundRobin` | 轮询 | 否 | 否 | 节点同构、希望严格平均 |
+| `consistentHash` | 一致性哈希 | 否 | 是（同参数稳定落同一节点） | 需要会话/缓存亲和 |
+
+实现要点：
+
+- **加权随机**：求总权重后在 `[0, total)` 取随机落点，依次扣减各节点权重，落点归零即选中；
+  权重全相同（或总和为 0）时退化为均匀随机；
+- **轮询**：`AtomicInteger` 自增后 `& Integer.MAX_VALUE` 再取模，避免长期累加溢出成负数；
+  `LoadBalancer` 是 SPI 单例，同一策略的计数天然全局共享；
+- **一致性哈希**：每个物理节点复制成多个虚拟节点散布到哈希环，请求 key 取哈希后顺时针取第一个节点；
+  **路由 key = 接口名 + 方法名 + 参数**，因此"同参数 → 同节点"。当前实现每次 `select` 重建哈希环
+  （节点变动自动生效，代价是 O(n·虚拟节点数)），高频场景可按节点列表指纹缓存环。
+
+---
+
+## 2. Cluster：失败之后怎么办
+
+| 策略 | 失败行为 | 返回 | 适用 |
+| --- | --- | --- | --- |
+| `failover`（默认） | 换其它节点重试，直到成功或预算用尽 | 成功值 / 抛最后一次异常 | 幂等读 |
+| `failfast` | 立即抛异常，不重试 | 抛出 | **非幂等写**（下单、扣款） |
+| `failsafe` | 吞掉异常并记日志 | `null` | 埋点/审计等可丢调用 |
+| `failback` | 立即返回，失败任务丢后台定时重试 | `null`（首次立即返回） | 最终一致的通知类操作 |
+
+`failover` 的细节：
+
+- 总尝试次数 = `retries + 1`（默认 `retries=2`，即最多打 3 个不同节点）；
+- 每轮从**未试过且未熔断**的候选里重选，避免重复打同一坏节点；
+- 熔断打开的节点**零成本跳过**：既不消耗重试预算，也不退避；
+- 真实失败后按 `retry-backoff-ms` **异步退避**再试，不阻塞调用线程；
+- 每次尝试仍受单次调用 `timeout` 约束。
+
+---
+
+## 3. 超时与重试的总账（重要）
+
+超时约束**单次**远程调用（`future.get(timeout)`），重试是它的**外层循环**。两条铁律：
+
+1. **算总账**：`最坏总耗时 ≈ (retries + 1) × timeout + retries × retry-backoff-ms`。
+   上游调用方的整体超时必须 ≥ 这个值，否则上游先超时、重试白跑；`retries` 也不宜过大，
+   故障期间会把耗时和下游压力一起放大。
+2. **只对幂等操作开重试**：`failover` 会重放请求，非幂等写操作请显式用 `failfast`
+   （框架目前不提供幂等键/服务端去重，见 BACKLOG §9）。
+
+---
+
+## 4. 配置方式
 
 ### `@RpcReference`
 
@@ -62,19 +113,7 @@ HelloService proxy = RpcClientProxy.create(HelloService.class, registry, client,
         "failover", "random", options);
 ```
 
----
-
-## 3. FailOver 行为
-
-- 总尝试次数 `retries + 1`；每次从**未试过**的候选里重选，避免重复打同一坏节点；
-- 熔断打开的节点**零成本跳过**，不消耗重试预算、也不退避；
-- 真实传输失败后可按 `retry-backoff-ms` 异步退避再试（不阻塞线程）；
-- 最坏总耗时 ≈ `(retries + 1) × timeout + retries × backoff`，上游整体超时要覆盖它；
-- 仅适合幂等操作；非幂等写操作请用 `failfast`。
-
----
-
-## 4. 单次调用覆盖策略
+### 单次调用覆盖策略
 
 `Cluster` / `LoadBalancer` 通过自适应扩展代理加载，默认名取注解/配置，单次调用可用
 `RpcContext` 覆盖：
@@ -82,15 +121,46 @@ HelloService proxy = RpcClientProxy.create(HelloService.class, registry, client,
 ```java
 RpcContext.getContext().setAttachment("cluster", "failfast");     // 本次调用不重试
 RpcContext.getContext().setAttachment("loadbalance", "roundrobin");
-orderService.query(...); // attachments 会随请求透传，并用于本次策略选择
+orderService.query(...); // attachments 随请求透传，并用于本次策略选择
 ```
 
 ---
 
-## 5. 熔断器机制
+## 5. 熔断器
 
-三态：`CLOSED` →（连续失败达阈值）→ `OPEN` →（openDuration 后）→ `HALF_OPEN`，
-只放一个探测：成功恢复 `CLOSED`，失败重新 `OPEN`。
+### 状态机
+
+```text
+                连续失败 >= failureThreshold
+      +-----------------------------------------+
+      |                                         v
+  +---------+                              +---------+
+  | CLOSED  |                              |  OPEN   |
+  +---------+                              +---------+
+      ^                                         |
+      |  探测成功                                | openDuration 到期
+      |                                         v
+  +-------------------------------------> +-----------+
+                                          | HALF_OPEN |
+                                          +-----------+
+                                                |
+                                                +-- 探测失败 --> OPEN（重新计时）
+```
+
+- **CLOSED**：正常放行，累计**连续失败次数**，达到 `failure-threshold` 转 OPEN；
+- **OPEN**：直接拒绝（快速失败，不再发起真实调用）；超过 `open-duration-ms` 后放行**一个**探测并转 HALF_OPEN；
+- **HALF_OPEN**：只放行那一个探测，其余请求仍拒绝；探测成功回 CLOSED、失败回 OPEN。
+
+> 最初设计的是"滑动窗口失败率阈值"，最终实现改为
+> **连续失败计数**——状态更少、行为更可预测，也不需要窗口清理线程。
+
+### 隐式契约（重要）
+
+`allowRequest()` 在 HALF_OPEN 期放行探测后，调用方**必须恰好回报一次** `onSuccess()` 或 `onFailure()`，
+否则 `probeInFlight` 不会复位、熔断器会永久卡在 HALF_OPEN 拒绝所有请求。
+`AbstractCluster.callWithBreaker` 用 try/catch 保证"成功/异常各回报一次"。
+
+### API
 
 ```java
 CircuitBreakerRegistry.configure(CircuitBreakerOptions.builder()
@@ -105,15 +175,19 @@ CircuitBreakerRegistry.options();                                // 当前默认
 
 - 熔断器按节点（`host:port`）维度共享；已创建的熔断器保持创建时的参数，新节点使用新参数；
 - `CircuitBreakerRegistry.clear()` 清空状态并恢复默认参数（测试/运维重置用）；
-- Spring 场景下，`conduit.cluster.breaker.*` 在创建 `RpcClient` 时自动应用。
+- Spring 场景下 `conduit.cluster.breaker.*` 在创建 `RpcClient` 时自动应用。
 
 ---
 
-## 6. 策略选择建议
+## 6. 测试与观测
 
-| 策略 | 失败行为 | 适用 |
-| --- | --- | --- |
-| `failover`（默认） | 换节点重试到预算用尽 | 幂等读 |
-| `failfast` | 立即失败 | 非幂等写 |
-| `failsafe` | 忽略、返回空 | 埋点/审计等可丢调用 |
-| `failback` | 先返回空、后台重试 | 最终一致的通知类操作 |
+| 关注点 | 用例 |
+| --- | --- |
+| 三种负载均衡的分流/权重/粘性 | `LoadBalancerTest` |
+| 四种容错语义、重试预算与退避 | `ClusterTest`、`ClusterRetryConfigTest` |
+| 熔断三态与"半开只放一个探测" | `CircuitBreakerTest`、`CircuitBreakerRegistryTest` |
+| 多节点真实网络下的分流/下线/容错/熔断 | `conduit-it`：`MultiNodeClusterIntegrationTest` |
+| 熔断状态观测 | `CircuitBreakerRegistry.state(node)`；`MetricsFilter` 记录调用成功率 |
+
+设计取舍：节点级熔断而不是接口级——一个坏节点不该拖垮该接口的全部流量；重试与熔断都在 `AbstractCluster`
+一处收口，四种策略只改"失败后的动作"，不重复实现选点与熔断闸门。

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>conduit-testkit</artifactId>
+    <name>conduit-testkit</name>
+    <description>测试工具包：真实服务端/客户端夹具、注册中心替身、TLS自签证书、条件等待与全局状态复位。</description>
+
+    <dependencies>
+        <!-- 被测框架：服务端 + 客户端 + 注册中心抽象 + 传输层（TLS/选项） -->
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-server</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-client</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-registry</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-remoting</artifactId>
+        </dependency>
+
+        <!-- 复位熔断器状态需要cluster模块 -->
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-cluster</artifactId>
+        </dependency>
+
+        <!-- 使用方直接写断言：把JUnit作为普通依赖传递出去 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+    </dependencies>
+</project>

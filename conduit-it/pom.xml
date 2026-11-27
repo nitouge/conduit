@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>conduit-it</artifactId>
+    <name>conduit-it</name>
+    <description>集成测试：真实网络、多节点、跨进程与集群协作（不发布）。</description>
+
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <!-- 测试夹具（传递带入 server/client/registry/cluster/remoting） -->
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 多JVM用例需要真实注册中心（本机有Nacos时才跑，无Nacos自动跳过） -->
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-registry-nacos</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 跨进程用例要让子JVM复用测试classpath：关闭 surefire 的 manifest-only jar，
+                         这样 java.class.path 是真实的依赖路径列表 -->
+                    <useManifestOnlyJar>false</useManifestOnlyJar>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

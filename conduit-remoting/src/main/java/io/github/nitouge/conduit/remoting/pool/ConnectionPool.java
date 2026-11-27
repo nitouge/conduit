@@ -24,9 +24,8 @@ import java.util.function.ToIntFunction;
  *
  * <p>设计要点：</p>
  * <ul>
- *   <li><b>长连接复用</b>：同地址默认复用一条连接（{@code maxConnectionsPerAddress=1}），
- *       与Dubbo的"每provider一条长连接"模型一致；配置>1时按<b>在途请求数最少</b>选连接，
- *       并在所有连接都有在途请求时异步补建，直到到达上限。</li>
+ *   <li><b>长连接复用</b>：同地址默认复用一条连接（{@code maxConnectionsPerAddress=1}）；
+ *       配置>1时按<b>在途请求数最少</b>选连接，并在所有连接都有在途请求时异步补建，直到到达上限。</li>
  *   <li><b>单飞建链</b>：同一地址同一时刻只允许一个建链过程，其它请求等待同一个future，
  *       避免并发Connection Refused风暴。</li>
  *   <li><b>握手后可用</b>：{@link Connector} 返回的future只有在协议握手成功后才完成，
@@ -47,7 +46,7 @@ public class ConnectionPool implements AutoCloseable {
     /** 标记"由连接池主动回收（闲置）"的连接：关闭时不应触发断线重连 */
     private static final AttributeKey<Boolean> EVICTED = AttributeKey.valueOf("conduit.pool.evicted");
 
-    /** 建链器：返回的future应在TCP连接<b>且协议握手</b>都成功后完成 */
+    /** 建链器：返回的future应在TCP连接且协议握手都成功后完成 */
     @FunctionalInterface
     public interface Connector {
         CompletableFuture<Channel> connect(InetSocketAddress address);
@@ -79,7 +78,8 @@ public class ConnectionPool implements AutoCloseable {
         this.idleTimeoutMillis = idleTimeoutMillis;
         if (idleTimeoutMillis > 0) {
             this.evictor = Executors.newSingleThreadScheduledExecutor(
-                    daemonThreadFactory("conduit-pool-evictor"));
+                    daemonThreadFactory("conduit-pool-evictor")
+            );
             long interval = Math.max(100L, idleTimeoutMillis / 4);
             this.evictor.scheduleWithFixedDelay(this::evictIdle, interval, interval, TimeUnit.MILLISECONDS);
         } else {
@@ -224,8 +224,8 @@ public class ConnectionPool implements AutoCloseable {
             try {
                 future = connector.connect(address);
             } catch (Throwable t) {
-                return CompletableFuture.failedFuture(
-                        t instanceof RpcException ? t : new RpcException("建链异常: " + address, t));
+                return CompletableFuture.failedFuture(t instanceof RpcException ?
+                        t : new RpcException("建链异常: " + address, t));
             }
             if (future == null) {
                 return CompletableFuture.failedFuture(new RpcException("建链器返回null: " + address));

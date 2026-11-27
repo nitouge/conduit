@@ -18,6 +18,25 @@
 - Filter 拦截链 SPI（消费侧 + 提供侧）与 `RpcRequest` 隐式附加参数 `attachments`（配合 `RpcContext`）。
 - 真正的 Spring Boot Starter（`conduit-spring-boot-starter`）与跨进程 `conduit-starter-demo` 示例。
 - Provider 端非阻塞异步调用支持。
+- **性能基准（`conduit-benchmark`）**：新增 JMH 基准模块，覆盖端到端 QPS 与延迟分布
+  （p50/p90/p95/p99/p99.9）、四种序列化的吞吐与体积、协议编解码（含 gzip 对比）；
+  实测数据与优化方向见 [docs/BENCHMARK.md](docs/BENCHMARK.md)。
+- **构建前置校验 JDK**：根 POM 增加 `maven-enforcer-plugin` 的 `requireJavaVersion [17,)`，
+  Maven 跑在低版本 JDK 上时 `validate` 阶段直接给出明确提示（否则会在测试阶段抛
+  `class file version 61.0 ... up to 52.0`，很难定位是 JVM 版本问题）。
+- **JDK 17 启动脚本**：新增 `scripts/mvn17.cmd` / `mvn17.ps1` / `mvn17.sh`，多 JDK 机器上
+  无需修改全局 `JAVA_HOME` 即可用 JDK 17 跑 Maven（按 `JAVA17_HOME` → 已是 17 的 `JAVA_HOME`
+  → 常见安装目录查找）；新增 `scripts/test-one.cmd` / `test-one.ps1` 一键跑单个/多个测试类
+  （自动补 `-pl/-am/-Dtest` 与两个 surefire 开关），以及 `scripts/use-jdk.cmd` 在当前 cmd 窗口
+  切换 JDK（`call scripts\use-jdk.cmd 17|11|8`）。
+- **测试基建（`conduit-testkit` / `conduit-it`）**：新增可复用测试夹具（真实 `TestServer`/`TestRpc`、
+  注册中心替身、TLS 自签证书、条件等待、全局状态复位）与集成测试模块（多节点负载均衡/下线/容错/熔断、
+  TLS 端到端、provider 运行在独立 JVM 的跨进程调用）；测试分层与约定见 [docs/TESTING.md](docs/TESTING.md)。
+- **三阶段测试覆盖**：阶段一补齐请求-响应匹配（`PendingRequestsTest`）与序列化边界（空/null/数组/attachments/64KB）；
+  阶段二新增 `MultiJvmRegistryIntegrationTest`（2 个 provider JVM + Nacos + consumer JVM，验证注册发现、
+  跨进程调用、roundrobin、优雅下线收敛与重启恢复）；阶段三新增线性一致性检测器
+  （`LinearizabilityChecker`，Wing &amp; Gong）并用于 `InMemoryRegistry`，以及 Chaos 三场景
+  （进程崩溃/服务变慢/重启自愈）。
 
 - **基础通信层加固（Protocol + Transport）**：
   - 协议版本协商：新增 `HANDSHAKE` / `HANDSHAKE_ACK` / `HANDSHAKE_REJECT` 控制帧；版本取双方支持区间的交集最高版（未来版本平滑降级、过旧版本明确拒绝），并在握手同时协商 codec 与压缩能力；握手超时、未握手业务帧拦截。
@@ -28,6 +47,7 @@
   - 断线自动重连：新增 `ReconnectManager`，指数退避后台重连（成功即停、达上限放弃），并保留按需建链兜底。
   - 客户端建链/发送改为完全异步，不再阻塞调用线程；请求超时清理改用独立调度线程。
   - 新增 `ClientOptions` / `ServerOptions` 与 `conduit.transport.*` 配置项。
+  - 传输与协议设计（帧格式、握手、压缩、心跳、连接池、重连、TLS、不变量）见 [docs/TRANSPORT.md](docs/TRANSPORT.md)。
 
 - **核心扩展机制（SPI + Cluster）**：
   - SPI 自适应扩展：新增 `@Adaptive` 与 `ExtensionLoader.getAdaptiveExtension()`，按 `Map` / `RpcRequest.attachments` 的 key 在每次调用时动态选择实现，未取到回退默认；
@@ -35,6 +55,7 @@
   - 集群可配置重试：新增 `ClusterOptions`（重试次数/退避/熔断参数），`@RpcReference(retries, retryBackoffMs)` 与 `conduit.cluster.*` 全局配置；FailOver 支持异步退避、熔断节点跳过不消耗预算；
   - 熔断器可配置：新增 `CircuitBreakerOptions` 与 `CircuitBreakerRegistry.configure/state/reset`；
   - Cluster/LoadBalancer 经自适应代理支持单次调用覆盖（`RpcContext` 的 `cluster` / `loadbalance` attachment）。
+  - 扩展点与自适应加载见 [docs/SPI.md](docs/SPI.md)，负载均衡/容错策略/熔断状态机见 [docs/CLUSTER.md](docs/CLUSTER.md)。
 
 - **服务治理（Registry + Observability）**：
   - 新增 `conduit-registry-zookeeper`：Curator 临时节点注册、`CuratorCache` 订阅、连接超时快速失败；使用 Curator `TestingServer` 内嵌测试。
@@ -42,12 +63,12 @@
   - 新增 `TraceFilter`：自动生成/透传 traceId、MDC 绑定；`RpcContext` 增加 `getTraceId/setTraceId`；默认启用。
   - 扩展 `MetricsFilter`：QPS/成功率、平均/最大/最小 RT、延迟分桶与分位估算、全局汇总与重置。
   - 新增 `StructuredLogFilter`：一行 JSON 访问日志（`CONDUIT.ACCESS.JSON`），默认关闭。
-  - 新增 [docs/REGISTRY.md](docs/REGISTRY.md)、[docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)。
   - 注册中心拆分：核心 `conduit-registry` 只保留抽象 + `local`；Nacos 迁到独立
     `conduit-registry-nacos`（Spring/starter 默认带上），ZooKeeper/Etcd 为独立模块；
     缺失适配模块时 `Registries` 给出明确的引入提示。
   - 真实环境验证：本地 Nacos 2.x 下 `NacosRegistryCallTest` 不再跳过、`conduit-starter-demo`
     两个真实进程跑通跨进程调用（provider/consumer pid 不同，Kryo + GZIP 按阈值协商生效）。
+  - 注册中心抽象与各适配实现见 [docs/REGISTRY.md](docs/REGISTRY.md)，traceId/指标/结构化日志与开关见 [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)。
 
 ### Docs
 
@@ -57,6 +78,11 @@
 - 新增 [docs/CLUSTER.md](docs/CLUSTER.md)：负载均衡、容错、重试配置与熔断器机制。
 - 新增 [docs/REGISTRY.md](docs/REGISTRY.md)：注册中心抽象、Nacos/Local/ZooKeeper/Etcd 适配。
 - 新增 [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)：traceId、指标、结构化日志与开关。
+- 新增 [docs/BENCHMARK.md](docs/BENCHMARK.md)：JMH 基准方法、实测数据、瓶颈与优化方向（含基准怎么跑）。
+- 新增 [docs/TESTING.md](docs/TESTING.md)：四层测试职责与三阶段（基本/分布式/工程质量）覆盖。
+- 新增 [docs/LAYERS.md](docs/LAYERS.md)：Transport → Invocation → Governance 三层导读，
+  知识点与代码位置的对应、覆盖状态与缺口清单。
+- 整理 [docs/SPI.md](docs/SPI.md)、[docs/CLUSTER.md](docs/CLUSTER.md)、[docs/REGISTRY.md](docs/REGISTRY.md)：
 
 ### Fixed
 

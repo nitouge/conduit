@@ -55,7 +55,9 @@ public class NettyServer implements AutoCloseable {
     private EventLoopGroup worker;
     private ExecutorService businessPool;
     private Channel serverChannel;
-    /** 所有已接入的连接（用于状态观测与关闭时统一断开） */
+    /**
+     * 所有已接入的连接（用于状态观测与关闭时统一断开）
+     */
     private final ChannelGroup childChannels = new DefaultChannelGroup(
             "conduit-server-children", GlobalEventExecutor.INSTANCE);
     private final LongAdder heartbeatsReceived = new LongAdder();
@@ -83,7 +85,9 @@ public class NettyServer implements AutoCloseable {
         this.options = options;
     }
 
-    /** 启动并绑定端口（阻塞直到绑定完成） */
+    /**
+     * 启动并绑定端口（阻塞直到绑定完成）
+     */
     public void start() {
         if (closed.get()) {
             throw new IllegalStateException("NettyServer已关闭，不能再次启动: " + host + ":" + port);
@@ -122,7 +126,9 @@ public class NettyServer implements AutoCloseable {
         log.info("Conduit NettyServer已启动，监听{}:{}（{})", host, port, options);
     }
 
-    /** 装配服务端pipeline */
+    /**
+     * 装配服务端pipeline
+     */
     private void initPipeline(SocketChannel ch) {
         childChannels.add(ch);
         ChannelPipeline pipeline = ch.pipeline();
@@ -181,10 +187,12 @@ public class NettyServer implements AutoCloseable {
         Future<?> workerShutdown = null;
         Future<?> bossShutdown = null;
         if (worker != null) {
-            workerShutdown = worker.shutdownGracefully(0, options.getShutdownTimeoutMillis(), TimeUnit.MILLISECONDS);
+            workerShutdown = worker.shutdownGracefully(0,
+                    options.getShutdownTimeoutMillis(), TimeUnit.MILLISECONDS);
         }
         if (boss != null) {
-            bossShutdown = boss.shutdownGracefully(0, options.getShutdownTimeoutMillis(), TimeUnit.MILLISECONDS);
+            bossShutdown = boss.shutdownGracefully(0,
+                    options.getShutdownTimeoutMillis(), TimeUnit.MILLISECONDS);
         }
         if (!inEventLoop()) {
             if (workerShutdown != null) {
@@ -209,12 +217,16 @@ public class NettyServer implements AutoCloseable {
         return options;
     }
 
-    /** 当前已接入的连接数 */
+    /**
+     * 当前已接入的连接数
+     */
     public int getActiveConnectionCount() {
         return childChannels.size();
     }
 
-    /** 已接收的PING数（保活观测） */
+    /**
+     * 已接收的PING数（保活观测）
+     */
     public long getHeartbeatsReceived() {
         return heartbeatsReceived.sum();
     }

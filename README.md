@@ -67,7 +67,7 @@ graph TD
 
 ## 🧱 模块结构
 
-共 15 个模块（含示例聚合），严格分层，**下层绝不依赖上层**，`api` 与 `common` 处于最底层；`conduit-example` 是示例聚合模块（不参与远程仓库发布），内含 `conduit-demo` 与 `conduit-starter-demo`（后者又聚合 api/provider/consumer 三个子工程）。
+共 18 个模块（含示例聚合、集成测试与基准），严格分层，**下层绝不依赖上层**，`api` 与 `common` 处于最底层；`conduit-example`、`conduit-it`、`conduit-benchmark` 都不参与远程仓库发布。
 
 ```text
 Conduit/
@@ -85,12 +85,15 @@ Conduit/
 ├── conduit-cluster                    # 集群容错：LoadBalancer/Cluster/CircuitBreaker
 ├── conduit-spring                     # Spring 整合：@EnableConduit/@RpcService/@RpcReference
 ├── conduit-spring-boot-starter        # Spring Boot Starter：依赖即自动装配
-└── conduit-example                    # 示例聚合（不发布）
-    ├── conduit-demo                         # 可运行示例：api / provider / consumer（编程式）
-    └── conduit-starter-demo                 # starter用法示例（聚合）
-        ├── conduit-starter-demo-api             # 共享接口
-        ├── conduit-starter-demo-provider        # 提供者进程
-        └── conduit-starter-demo-consumer        # 消费者进程
+├── conduit-testkit                    # 测试工具包：真实服务端/客户端夹具、注册中心替身、TLS证书
+├── conduit-example                    # 示例聚合（不发布）
+│   ├── conduit-demo                         # 可运行示例：api / provider / consumer（编程式）
+│   └── conduit-starter-demo                 # starter用法示例（聚合）
+│       ├── conduit-starter-demo-api             # 共享接口
+│       ├── conduit-starter-demo-provider        # 提供者进程
+│       └── conduit-starter-demo-consumer        # 消费者进程
+├── conduit-it                         # 集成测试（不发布）：真实网络、多节点、跨进程、TLS
+└── conduit-benchmark                  # JMH性能基准（不发布）：吞吐/延迟分布/序列化/编解码
 ```
 
 | 模块 | 职责 |
@@ -110,6 +113,9 @@ Conduit/
 | **conduit-spring** | `@EnableConduit`、`@RpcService` 自动暴露、`@RpcReference` 自动注入（`BeanPostProcessor`）、自动配置。 |
 | **conduit-spring-boot-starter** | 纯依赖聚合（starter 约定）：引入即自动装配，无需显式 `@EnableConduit`。 |
 | **conduit-example** | 示例聚合模块（`maven.deploy.skip=true`，不发布）：`conduit-demo`（编程式直连/Nacos/Spring 示例）+ `conduit-starter-demo`（跨两个真实 Spring Boot 进程、经 Nacos 验证 starter 自动装配）。 |
+| **conduit-testkit** | 测试工具包：`TestServer`/`TestRpc` 真实服务端与客户端夹具、`TestRegistries` 注册中心替身、`TlsTestCerts` 自签证书、`Await`/`Ports`、`TestReset` 全局状态复位；使用方以 `test` 作用域依赖。 |
+| **conduit-it** | 集成测试（`maven.deploy.skip=true`，不发布）：多节点负载均衡/下线/容错/熔断、TLS 端到端、provider 跑在独立 JVM 的跨进程调用。|
+| **conduit-benchmark** | JMH 性能基准（`maven.deploy.skip=true`，不发布）：端到端 QPS 与延迟分布、序列化吞吐、协议编解码吞吐。 |
 
 ---
 
@@ -200,6 +206,9 @@ conduit.registry.type: local
 | [TRANSPORT.md](docs/TRANSPORT.md) | **传输层与协议**：帧格式、版本协商、压缩、心跳、连接池、断线重连、TLS、不变量 |
 | [REGISTRY.md](docs/REGISTRY.md) | **注册中心**：抽象/缓存兜底、Nacos/Local/ZooKeeper/Etcd 适配与使用 |
 | [OBSERVABILITY.md](docs/OBSERVABILITY.md) | **可观测性**：traceId、指标、结构化日志与开关 |
+| [BENCHMARK.md](docs/BENCHMARK.md) | **性能基准**：JMH 方法说明、实测吞吐/延迟分布、瓶颈分析与优化方向 |
+| [TESTING.md](docs/TESTING.md) | **测试体系**：单元/testkit/集成测试/基准四层职责与写法约定 |
+| [LAYERS.md](docs/LAYERS.md) | **三层模型导读**：Transport → Invocation → Governance，知识点 ↔ 代码位置 ↔ 覆盖状态与缺口 |
 | [FLOWCHARTS.md](docs/FLOWCHARTS.md) | **全局流程与流转图**：端到端时序、决策层、协议帧、SPI、注册发现、熔断状态机、线程模型、Spring 启停|
 | [ARCHITECTURE.md](temp/ARCHITECTURE.md) | 整体架构、模块分层、调用链路 |
 | [PROTOCOL.md](docs/PROTOCOL.md) | 自定义协议、消息头逐字段、拆包粘包 |

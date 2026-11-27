@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你对 Conduit 感兴趣。这是一个从零手写的 Java RPC 框架，欢迎 Issue、讨论和 Pull Request —— 不管是修 bug、补文档，还是实现 [docs/BACKLOG.md](temp/BACKLOG.md) 里的某一项增强。
+感谢你对 Conduit 感兴趣。这是一个 Java RPC 框架，欢迎 Issue、讨论和 Pull Request —— 不管是修 bug、补文档，还是实现 [docs/BACKLOG.md](temp/BACKLOG.md) 里的某一项增强。
 
 ## 开始之前
 

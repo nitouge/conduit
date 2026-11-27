@@ -113,11 +113,18 @@ public class NettyClient implements AutoCloseable {
     public NettyClient(ClientOptions options) {
         this.options = options;
         // 客户端线程设为daemon：应用退出时不因客户端未close而卡住JVM
-        this.group = new NioEventLoopGroup(0, new DefaultThreadFactory("conduit-client", true));
+        this.group = new NioEventLoopGroup(0,
+                new DefaultThreadFactory("conduit-client", true)
+        );
         this.timeoutScheduler = Executors.newSingleThreadScheduledExecutor(
-                daemonThreadFactory("conduit-client-timeout"));
-        this.pool = new ConnectionPool(this::connect, channel -> inFlight(channel).size(),
-                options.getMaxConnectionsPerAddress(), 0, options.getIdleConnectionTimeoutMillis());
+                daemonThreadFactory("conduit-client-timeout")
+        );
+        this.pool = new ConnectionPool(this::connect,
+                channel -> inFlight(channel).size(),
+                options.getMaxConnectionsPerAddress(),
+                0,
+                options.getIdleConnectionTimeoutMillis()
+        );
         this.reconnectManager = options.isReconnectEnabled() && options.getReconnectMaxAttempts() > 0
                 ? new ReconnectManager(pool::ensureConnection, options.getReconnectMaxAttempts(),
                 options.getReconnectBaseDelayMillis(), options.getReconnectMaxDelayMillis())
@@ -129,7 +136,7 @@ public class NettyClient implements AutoCloseable {
     }
 
     /**
-     * 为一次建链创建Bootstrap：TLS场景必须把<b>对端主机名</b>交给 SslHandler（newHandler 带 peerHost/peerPort），
+     * 为一次建链创建Bootstrap：TLS场景必须把<b>对端主机名</b>交给SslHandler（newHandler带peerHost/peerPort），
      * 否则JDK SSLEngine不知道peerHost，HTTPS主机名校验会直接失败（"Hostname or IP address is undefined"）。
      * Bootstrap本身很轻，每个目标地址建链时创建一次即可。
      */

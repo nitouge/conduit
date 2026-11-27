@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.nitouge</groupId>
+        <artifactId>conduit-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>conduit-benchmark</artifactId>
+    <name>conduit-benchmark</name>
+    <description>JMH性能基准：RPC吞吐量、延迟分布、序列化与协议编解码。</description>
+
+    <properties>
+        <!-- 基准模块不发布到远程仓库 -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <jmh.version>1.37</jmh.version>
+    </properties>
+
+    <dependencies>
+        <!-- 被测框架：服务端 + 客户端 + 序列化 + 协议 + 本地注册中心 -->
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-server</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-client</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-protocol</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-serialization</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.nitouge</groupId>
+            <artifactId>conduit-registry</artifactId>
+        </dependency>
+
+        <!-- JMH：core 提供基准运行时，annprocess 在编译期生成 BenchmarkList -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+            <version>${jmh.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+            <version>${jmh.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- 基准进程内也给框架日志一个承接实现（默认WARN，避免DEBUG日志拖慢测量） -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 打成带Main-Class的benchmarks.jar，便于直接java -jar运行 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.4.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>benchmarks</finalName>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.openjdk.jmh.Main</mainClass>
+                                </transformer>
+                                <!-- 合并SPI配置：序列化器/注册中心/过滤器等META-INF/services与META-INF/rpc -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/rpc/io.github.nitouge.conduit.serialization.Serializer</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/rpc/io.github.nitouge.conduit.registry.RegistryFactory</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/rpc/io.github.nitouge.conduit.common.filter.Filter</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/rpc/io.github.nitouge.conduit.cluster.Cluster</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/rpc/io.github.nitouge.conduit.cluster.LoadBalancer</resource>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
