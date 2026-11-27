@@ -72,6 +72,19 @@ public final class TestServer implements AutoCloseable {
         return this;
     }
 
+    /**
+     * 暴露服务并声明路由属性（版本/分组/标签/机房）：构造多版本、灰度、多机房集群时用。
+     *
+     * <pre>{@code
+     * TestServer.of(registry).export(EchoService.class, new EchoServiceImpl("v2"), "2.0.0", "", "gray", "sh-1")
+     * }</pre>
+     */
+    public TestServer export(Class<?> interfaceClass, Object impl, String version, String group,
+                             String tag, String zone) {
+        server.export(interfaceClass, impl, version, group, tag, zone, 100);
+        return this;
+    }
+
     /** 启动监听；带注册中心时同时完成注册 */
     public TestServer start() {
         server.start();

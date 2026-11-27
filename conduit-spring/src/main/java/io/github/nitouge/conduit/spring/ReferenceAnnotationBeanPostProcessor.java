@@ -1,6 +1,7 @@
 package io.github.nitouge.conduit.spring;
 
 import io.github.nitouge.conduit.api.annotation.RpcReference;
+import io.github.nitouge.conduit.client.ReferenceOptions;
 import io.github.nitouge.conduit.client.RpcClient;
 import io.github.nitouge.conduit.client.proxy.RpcClientProxy;
 import io.github.nitouge.conduit.cluster.ClusterOptions;
@@ -60,7 +61,8 @@ public class ReferenceAnnotationBeanPostProcessor implements BeanPostProcessor {
                         ref.timeout(),
                         ref.cluster().getType(),
                         ref.loadbalance().getType(),
-                        clusterOptions(ref)
+                        clusterOptions(ref),
+                        new ReferenceOptions(ref.version(), ref.group(), ref.tag())
                 );
                 field.setAccessible(true);
                 try {

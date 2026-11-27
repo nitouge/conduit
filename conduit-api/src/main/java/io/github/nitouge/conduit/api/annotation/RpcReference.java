@@ -25,6 +25,14 @@ public @interface RpcReference {
     /** 服务分组 */
     String group() default "";
 
+    /**
+     * 默认路由标签（灰度/压测等）。
+     *
+     * <p>只是默认值：单次调用可用 {@code RpcContext.getContext().setAttachment("conduit.tag", "gray")}
+     * 临时覆盖，用于灰度切流。</p>
+     */
+    String tag() default "";
+
     /** 调用超时（毫秒） */
     long timeout() default 3000;
 

@@ -62,6 +62,16 @@ public final class ProtocolConstants {
     /** 握手拒绝（服务端 -> 客户端）。body为1字节 {@code HANDSHAKE_*} 拒绝原因 */
     public static final byte TYPE_HANDSHAKE_REJECT = 6;
 
+    /**
+     * 取消帧（客户端 -> 服务端）。头里的 requestId 指向<b>要取消的那次请求</b>，body为1字节
+     * {@code CANCEL_*} 取消原因。
+     *
+     * <p>为什么需要它：客户端超时只是「我不等了」，服务端线程还在执行业务方法——上游超时会把
+     * 下游变成纯粹的资源浪费（长尾放大）。CANCEL 让「不等了」这个事实显式到达对端，由对端
+     * 自行中断。控制帧必须是独立的 type 而不是错误响应：它没有响应语义、也不参与请求-响应关联。</p>
+     */
+    public static final byte TYPE_CANCEL = 7;
+
     // ---- handshake status：握手结果/拒绝原因 ----
     /** 成功 */
     public static final byte HANDSHAKE_OK = 0;
@@ -73,6 +83,16 @@ public final class ProtocolConstants {
     public static final byte HANDSHAKE_UNSUPPORTED_COMPRESS = 3;
     /** 客户端本地状态：等待握手应答超时（不会出现在线上帧里） */
     public static final byte HANDSHAKE_TIMEOUT = 4;
+
+    // ---- cancel reason：取消帧的原因（放在body里，与握手帧同构）----
+    /** 调用方本地超时（最常见的取消来源） */
+    public static final byte CANCEL_CLIENT_TIMEOUT = 0;
+    /** 调用方主动放弃（future被取消、调用被中断） */
+    public static final byte CANCEL_CALLER_ABANDONED = 1;
+    /** 上游传递的 deadline 已到点 */
+    public static final byte CANCEL_DEADLINE_EXCEEDED = 2;
+    /** 未知/未区分的原因（对端未填或未来版本新增） */
+    public static final byte CANCEL_UNKNOWN = -1;
 
     // ---- codec：序列化类型 id（与SerializerType一致）----
     public static final byte CODEC_JDK = 1;
@@ -89,9 +109,14 @@ public final class ProtocolConstants {
         return type == TYPE_HANDSHAKE || type == TYPE_HANDSHAKE_ACK || type == TYPE_HANDSHAKE_REJECT;
     }
 
+    /** 是否为取消帧 */
+    public static boolean isCancelType(byte type) {
+        return type == TYPE_CANCEL;
+    }
+
     /** 是否为控制帧（不承载业务payload） */
     public static boolean isControlType(byte type) {
-        return type == TYPE_HEARTBEAT || isHandshakeType(type);
+        return type == TYPE_HEARTBEAT || type == TYPE_CANCEL || isHandshakeType(type);
     }
 
     /** 给定版本是否在本端点支持区间内 */
@@ -129,6 +154,16 @@ public final class ProtocolConstants {
         };
     }
 
+    /** 取消原因的可读文本，便于日志排障 */
+    public static String cancelReasonText(byte reason) {
+        return switch (reason) {
+            case CANCEL_CLIENT_TIMEOUT -> "CLIENT_TIMEOUT";
+            case CANCEL_CALLER_ABANDONED -> "CALLER_ABANDONED";
+            case CANCEL_DEADLINE_EXCEEDED -> "DEADLINE_EXCEEDED";
+            default -> "UNKNOWN(" + reason + ")";
+        };
+    }
+
     /** 消息类型可读文本，便于日志排障 */
     public static String typeName(byte type) {
         return switch (type) {
@@ -138,6 +173,7 @@ public final class ProtocolConstants {
             case TYPE_HANDSHAKE -> "HANDSHAKE";
             case TYPE_HANDSHAKE_ACK -> "HANDSHAKE_ACK";
             case TYPE_HANDSHAKE_REJECT -> "HANDSHAKE_REJECT";
+            case TYPE_CANCEL -> "CANCEL";
             default -> "UNKNOWN(" + type + ")";
         };
     }

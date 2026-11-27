@@ -190,9 +190,9 @@ conduit.registry.type: local
 | **M3** | ✅ | SPI（`ExtensionLoader`）+ Kryo / JSON / Protostuff，序列化可替换落地。 |
 | **M4** | ✅ | 异步（`CompletableFuture`）+ 负载均衡（Random/RoundRobin/ConsistentHash）+ 集群容错（FailFast/Over/Safe/Back）+ 熔断。 |
 | **M5** | ✅ | Spring 集成 + 注解驱动（`@EnableConduit`/`@RpcService`/`@RpcReference`）+ `application.yml` 自动配置。 |
-| **传输层加固** | ✅ | 协议版本协商、数据压缩、TLS、连接池、心跳保活、断线自动重连；底层通信稳定可靠（见 [TRANSPORT.md](docs/TRANSPORT.md)）。 |
+| **传输层加固** | ✅ | 协议版本协商、数据压缩、TLS、连接池、心跳保活、断线自动重连；CANCEL 控制帧与 deadline 传递（超时不再让下游白跑），见 [TRANSPORT.md](docs/TRANSPORT.md)。 |
 | **核心扩展机制** | ✅ | `@Adaptive` 自适应扩展、`Lifecycle` 生命周期、可配置重试/退避与熔断参数。 |
-| **服务治理** | ✅ | ZooKeeper/Etcd 注册中心适配；traceId 链路追踪、核心指标、结构化日志（见 [REGISTRY.md](docs/REGISTRY.md) / [OBSERVABILITY.md](docs/OBSERVABILITY.md)）。 |
+| **服务治理** | ✅ | ZooKeeper/Etcd 注册中心适配；version/group/tag 路由与同机房优先；traceId 链路追踪、核心指标、结构化日志（见 [REGISTRY.md](docs/REGISTRY.md) / [CLUSTER.md](docs/CLUSTER.md) / [OBSERVABILITY.md](docs/OBSERVABILITY.md)）。 |
 
 > 构建需 **JDK 17**（Spring Boot 3.x 要求）：`set JAVA_HOME=<jdk17>` 后 `mvn clean test`
 
@@ -203,7 +203,8 @@ conduit.registry.type: local
 | 文档 | 内容 |
 | --- | --- |
 | [USER_GUIDE.md](docs/USER_GUIDE.md) | **使用手册**：引入坐标、三种用法、配置项、序列化/容错/异步 |
-| [TRANSPORT.md](docs/TRANSPORT.md) | **传输层与协议**：帧格式、版本协商、压缩、心跳、连接池、断线重连、TLS、不变量 |
+| [TRANSPORT.md](docs/TRANSPORT.md) | **传输层与协议**：帧格式、版本协商、压缩、心跳、取消与deadline、连接池、断线重连、TLS、不变量 |
+| [CLUSTER.md](docs/CLUSTER.md) | **路由与容错**：version/group/tag 路由、同机房优先、负载均衡、重试与熔断 |
 | [REGISTRY.md](docs/REGISTRY.md) | **注册中心**：抽象/缓存兜底、Nacos/Local/ZooKeeper/Etcd 适配与使用 |
 | [OBSERVABILITY.md](docs/OBSERVABILITY.md) | **可观测性**：traceId、指标、结构化日志与开关 |
 | [BENCHMARK.md](docs/BENCHMARK.md) | **性能基准**：JMH 方法说明、实测吞吐/延迟分布、瓶颈分析与优化方向 |

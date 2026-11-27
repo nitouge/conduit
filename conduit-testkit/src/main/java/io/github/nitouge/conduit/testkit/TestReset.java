@@ -4,6 +4,7 @@ import io.github.nitouge.conduit.cluster.breaker.CircuitBreakerRegistry;
 import io.github.nitouge.conduit.common.config.ConduitConfig;
 import io.github.nitouge.conduit.common.filter.FilterLoader;
 import io.github.nitouge.conduit.common.filter.builtin.MetricsFilter;
+import io.github.nitouge.conduit.remoting.ServerCallRegistry;
 
 /**
  * 全局静态状态复位：框架里有若干"进程级"状态（filter快照、熔断器、配置源、指标累计），
@@ -27,6 +28,8 @@ public final class TestReset {
         ConduitConfig.clearSource();
         CircuitBreakerRegistry.clear();
         MetricsFilter.reset();
+        // 服务端在途调用表是静态的：上个用例没跑完的请求必须清掉，否则 activeCount 断言会串味
+        ServerCallRegistry.reset();
     }
 
     /**

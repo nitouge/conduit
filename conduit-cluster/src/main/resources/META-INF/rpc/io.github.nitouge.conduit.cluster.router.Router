@@ -1,0 +1,4 @@
+# 路由SPI配置（name=实现类全限定名），由ExtensionLoader加载。
+#
+# default - 按 version/group/tag 硬过滤 + 同机房(zone)软优先；未声明任何条件时原样返回候选。
+default=io.github.nitouge.conduit.cluster.router.DefaultRouter

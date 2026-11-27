@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -80,6 +81,35 @@ class EtcdRegistryTest {
         registry.unregister(service);
         awaitTrue("注销变化应推送给订阅者", 2_000,
                 () -> latest.get() != null && latest.get().isEmpty());
+    }
+
+    @Test
+    void routingAttributesSurviveRegistration() {
+        ServiceMeta service = new ServiceMeta("svc.Route", "10.0.0.4", 20883, 60)
+                .routeAttributes("2.0.0", "pay", "gray", "sh-1");
+
+        registry.register(service);
+
+        List<ServiceMeta> found = registry.discover("svc.Route");
+        assertEquals(1, found.size());
+        assertEquals("2.0.0", found.get(0).getVersion(), "value里应带上版本等路由属性");
+        assertEquals("pay", found.get(0).getGroup());
+        assertEquals("gray", found.get(0).getTag());
+        assertEquals("sh-1", found.get(0).getZone());
+        assertEquals(60, found.get(0).getWeight());
+    }
+
+    @Test
+    void legacyWeightOnlyValueStillParses() {
+        // 升级前写入的实例 value 只有 weight，key 里是 host:port：升级后仍必须能发现
+        ops.kv.put(EtcdRegistry.BASE_PATH + "/svc.Legacy/10.0.0.7:20884", "77");
+
+        List<ServiceMeta> found = registry.discover("svc.Legacy");
+        assertEquals(1, found.size());
+        assertEquals("10.0.0.7", found.get(0).getHost());
+        assertEquals(20884, found.get(0).getPort());
+        assertEquals(77, found.get(0).getWeight());
+        assertNull(found.get(0).getVersion());
     }
 
     @Test

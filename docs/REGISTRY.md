@@ -47,13 +47,23 @@ Registry nacos    = Registries.getRegistry("nacos", "127.0.0.1:8848");
 
 ### 数据结构
 
-- `ServiceMeta`：`serviceName + host + port + weight`，`host:port` 是实例的天然唯一标识；
-  `equals/hashCode` 只比较 serviceName/host/port（节点身份），不含 weight；
+- `ServiceMeta`：`serviceName + host + port + weight`，外加路由属性 `version/group/tag/zone`；
+  `host:port` 是实例的天然唯一标识；`equals/hashCode` 只比较 serviceName/host/port（节点身份），
+  不含 weight 与路由属性——同一节点换权重/换版本仍应视作同一个实例，否则注册中心里会残留同端口的旧记录；
 - `NotifyListener.notify(List<ServiceMeta>)`：回调的是**全量最新列表**而非增量——
   消费者直接整体替换本地缓存，不用自己合并增量，不会出错；这也对齐三种注册中心查询接口的天然行为。
 
-> `serviceName` 当前就是接口全限定名；`version`/`group` 字段已在 `RpcRequest`/`ServiceMeta` 中预留，
-> 但**尚未参与服务名拼接与选路**（见 BACKLOG §9「路由规则」）。
+> `serviceName` 当前就是接口全限定名，**不**把 version/group 拼进去：多版本/分组共用同一个服务名，
+> 由消费侧 `Router` 在 `discover` 之后按 `ServiceMeta` 的路由属性过滤（见 [CLUSTER.md](CLUSTER.md) §2）。
+> 好处是一次 discover 就能拿到全部版本、便于灰度与压测走同一份注册数据；代价是路由属性必须完整发布，
+> 各适配器的存储格式见下表。
+>
+> | 适配器 | 路由属性存放位置 |
+> | --- | --- |
+> | `local` | `ServiceMeta` 对象本身（同 JVM 直接传引用） |
+> | `nacos` | 实例 metadata 的 `conduit.version` / `conduit.group` / `conduit.tag` / `conduit.zone` |
+> | `zookeeper` | 节点数据 `host\|port\|weight\|version\|group\|tag\|zone`（后四项 URL 编码） |
+> | `etcd` | value 同上（`ServiceMetaCodec` 统一编解码，兼容只有 `weight` 的老数据） |
 
 ---
 

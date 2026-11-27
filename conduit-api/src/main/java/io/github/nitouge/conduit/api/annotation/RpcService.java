@@ -23,6 +23,21 @@ public @interface RpcService {
     /** 服务分组 */
     String group() default "";
 
+    /**
+     * 实例标签（灰度/压测等，如 {@code gray}）。
+     *
+     * <p>随 {@code ServiceMeta} 注册到注册中心；消费侧用 {@code @RpcReference(tag=...)} 或
+     * 单次调用的 {@code conduit.tag} attachment 指定，实现按标签切流。</p>
+     */
+    String tag() default "";
+
+    /**
+     * 实例所在机房/可用区（如 {@code sh-1}），用于「同机房优先、跨机房兜底」。
+     *
+     * <p>消费侧机房取自 {@code conduit.zone} attachment 或配置 {@code conduit.router.zone}。</p>
+     */
+    String zone() default "";
+
     /** 权重，用于带权负载均衡 */
     int weight() default 100;
 }

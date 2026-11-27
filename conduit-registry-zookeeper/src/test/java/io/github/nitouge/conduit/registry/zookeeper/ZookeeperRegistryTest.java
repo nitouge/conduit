@@ -104,6 +104,24 @@ class ZookeeperRegistryTest {
     }
 
     @Test
+    void routingAttributesSurviveRegistration() {
+        ZookeeperRegistry registry = newRegistry();
+        String serviceName = uniqueService();
+        ServiceMeta service = new ServiceMeta(serviceName, "10.0.0.4", 20883, 60)
+                .routeAttributes("2.0.0", "pay", "gray", "sh-1");
+
+        registry.register(service);
+        awaitTrue("注册后应能发现实例", 5_000, () -> registry.discover(serviceName).size() == 1);
+
+        ServiceMeta found = registry.discover(serviceName).get(0);
+        assertEquals("2.0.0", found.getVersion(), "版本必须随注册信息一起发布，否则消费侧无法按版本路由");
+        assertEquals("pay", found.getGroup());
+        assertEquals("gray", found.getTag());
+        assertEquals("sh-1", found.getZone());
+        assertEquals(60, found.getWeight());
+    }
+
+    @Test
     void subscribeNotifiesOnRegisterAndUnregister() throws Exception {
         ZookeeperRegistry registry = newRegistry();
         String serviceName = uniqueService();

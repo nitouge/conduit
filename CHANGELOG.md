@@ -70,6 +70,22 @@
     两个真实进程跑通跨进程调用（provider/consumer pid 不同，Kryo + GZIP 按阈值协商生效）。
   - 注册中心抽象与各适配实现见 [docs/REGISTRY.md](docs/REGISTRY.md)，traceId/指标/结构化日志与开关见 [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)。
 
+- **取消与 deadline（Invocation）+ 路由规则（Governance）**：
+  - 新增 `TYPE_CANCEL` 控制帧（body 1 字节取消原因，不走序列化器）：客户端超时或调用方放弃时下发，
+    服务端按「连接 + requestId」找到在途调用并中断正在执行业务的线程（`ServerCallRegistry`）；
+    对端主动取消不再回写响应。
+  - deadline 传递：`RpcAttachments.DEADLINE` 以**绝对时间**写进 attachments，逐跳取
+    `min(上游deadline, now+本地超时)`；服务端到点自我中断并回一帧错误说明，已过期请求连业务线程都不占；
+    客户端本地等待与每次重试的传输超时都改用剩余预算（`RpcAttachments.budgetMillis`）。
+  - 新增 `Router` SPI 与 `DefaultRouter`：`discover → route → loadbalance`；version/group/tag 硬过滤、
+    zone 软优先（同机房优先），硬过滤为空直接失败并列出候选实例的实际属性（不回退全量）。
+  - `ServiceMeta` 增加 `version/group/tag/zone` 并随注册信息发布：Nacos 走实例 metadata，
+    ZK/Etcd 走节点数据（新增 `ServiceMetaCodec` 统一编解码，兼容只有 weight 的老数据）；
+    `@RpcService(version/group/tag/zone)`、`@RpcReference(version/group/tag)`、`ReferenceOptions` 全链路打通；
+    单次调用可用 `RpcContext` 的 `conduit.version/group/tag/zone` attachment 覆盖（灰度切流）。
+  - 文档同步：[TRANSPORT.md](docs/TRANSPORT.md) §6 取消与 deadline、[CLUSTER.md](docs/CLUSTER.md) §2 路由、
+    [REGISTRY.md](docs/REGISTRY.md) 路由属性存储格式。
+
 ### Docs
 
 - 补齐开源基础文档：`LICENSE`（Apache-2.0）、`CONTRIBUTING.md`、`CHANGELOG.md`。

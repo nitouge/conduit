@@ -317,9 +317,20 @@ client.close();
 | `loadbalance` | `random` | 负载均衡：`random`/`roundrobin`/`consistenthash` |
 | `retries` | `-1` | failover 额外重试次数；`-1` 表示用全局 `conduit.cluster.retries` |
 | `retryBackoffMs` | `-1` | 重试退避（ms）；`-1` 表示用全局 `conduit.cluster.retry-backoff-ms` |
-| `version` / `group` | `""` | 当前**声明但未参与路由**（serviceName 仅用接口名） |
+| `version` / `group` | `""` | 路由条件：只选声明了相同 version/group 的提供者（空 = 不限） |
+| `tag` | `""` | 路由条件：只选打了相同 `@RpcService(tag=...)` 标签的提供者（灰度切流） |
 
-`@RpcService`：`weight`（默认 100，用于带权负载均衡）、`version`/`group`（同上，暂未生效）。
+`@RpcService`：`weight`（默认 100，用于带权负载均衡）、`version`/`group`/`tag`/`zone`
+（随实例注册出去，供消费侧路由；见 [CLUSTER.md](CLUSTER.md) §2）。
+
+单次调用的路由覆盖（不改注解、不改代码）：
+
+```java
+RpcContext.getContext().setAttachment(RpcAttachments.TAG, "gray");   // 这次调用走灰度实例
+RpcContext.getContext().setAttachment(RpcAttachments.ZONE, "sh-1");  // 同机房优先
+```
+
+> 路由规则命中不到任何实例时**直接报错**（错误里带约束值与候选实例的实际属性），不会悄悄回退到全量。
 
 ---
 
@@ -388,6 +399,26 @@ f.thenAccept(System.out::println);   // 结果回来时回调，不阻塞当前�
 
 - **提供者侧也非阻塞**：服务实现可返回一个「稍后才完成」的 `CompletableFuture`（如 `supplyAsync`），服务端不会占住业务线程，响应在 future 完成时回写。
 - 失败通过返回的 future 暴露（`exceptionally`/`handle`），不会在调用处同步抛。
+
+### 超时、取消与 deadline（默认开启，无需配置）
+
+调用超时不再只是「客户端不等了」——框架会把它送达对端：
+
+- 单次调用超时（`@RpcReference(timeout=...)`，默认 3000ms）到点后，客户端发一帧 **CANCEL**，
+  服务端中断正在执行业务方法的线程；调用方主动 `future.cancel(true)` 同样会下发取消。
+- 每次调用会带一个 **deadline**（绝对时间，`min(上游deadline, now+本地超时)`）。服务 A 调 B 调 C 时，
+  B 转发的 deadline 不会晚于 A 的：上游放弃了，下游不会还在跑。到点后服务端**自己**中断。
+- 因为超时/取消的语义从「各自超时」变成「逐跳收敛」，同步调用的等待上限、每次重试的传输超时
+  都用**剩余预算**——重试不会把总耗时放大到 `(retries+1) × timeout` 之外。
+
+```java
+// 想让下游把某次调用算作"可以被牺牲"的请求，可以自己收紧预算
+RpcContext.getContext().setAttachment(RpcAttachments.DEADLINE,
+        Long.toString(System.currentTimeMillis() + 200));
+```
+
+> 中断只能打断可中断的代码（`sleep`/`wait`/阻塞IO 会抛 `InterruptedException`）；不响应中断的业务方法
+> 框架不会强杀线程，只是不再回写响应。细节见 [TRANSPORT.md](TRANSPORT.md) §6。
 
 ---
 

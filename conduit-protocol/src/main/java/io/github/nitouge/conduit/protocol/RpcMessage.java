@@ -3,8 +3,8 @@ package io.github.nitouge.conduit.protocol;
 /**
  * 一帧消息的内存表示：把协议头关键字段与payload放在一起，便于编解码与在pipeline中流转。
  *
- * <p>payload为RpcRequest（type=请求）或RpcResponse（type=响应）；心跳/握手等控制帧payload为null，
- * 握手帧用 {@link #getStatus()} 表达结果（成功/拒绝原因）。</p>
+ * <p>payload为RpcRequest（type=请求）或RpcResponse（type=响应）；心跳/握手/取消等控制帧payload为null，
+ * 握手帧用 {@link #getStatus()} 表达结果（成功/拒绝原因），取消帧用它表达取消原因。</p>
  */
 public class RpcMessage {
 
@@ -62,6 +62,20 @@ public class RpcMessage {
                 ProtocolConstants.HANDSHAKE_OK, 0L, null);
     }
 
+    /**
+     * 构造一个取消帧：requestId 指向要取消的请求，{@code reason} 说明为什么不等了。
+     *
+     * <p>无 body payload（原因放在 {@link #getStatus()}，与握手帧同构：控制帧的原因/结果都放
+     * status，不依赖任何序列化器）。</p>
+     *
+     * @param requestId 要取消的请求id（必须是本连接上已发出、尚未响应的请求）
+     * @param reason    {@code ProtocolConstants.CANCEL_*} 之一
+     */
+    public static RpcMessage cancel(long requestId, byte codec, byte version, byte reason) {
+        return build(ProtocolConstants.TYPE_CANCEL, codec, version,
+                ProtocolConstants.COMPRESS_NONE, reason, requestId, null);
+    }
+
     /** 构造一个握手成功应答帧：头里version/codec/compress为服务端接受（协商）的结果 */
     public static RpcMessage handshakeAck(byte version, byte codec, byte compress) {
         return build(ProtocolConstants.TYPE_HANDSHAKE_ACK, codec, version, compress,
@@ -107,9 +121,14 @@ public class RpcMessage {
         return type == ProtocolConstants.TYPE_HANDSHAKE_REJECT;
     }
 
-    /** 是否为不承载业务payload的控制帧（心跳/握手） */
+    /** 是否为不承载业务payload的控制帧（心跳/握手/取消） */
     public boolean isControlFrame() {
         return ProtocolConstants.isControlType(type);
+    }
+
+    /** 是否为取消帧 */
+    public boolean isCancel() {
+        return ProtocolConstants.isCancelType(type);
     }
 
     public byte getVersion() {

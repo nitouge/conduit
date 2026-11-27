@@ -20,7 +20,8 @@ import java.util.Objects;
  * <p>按codec字段选择 {@link Serializer}，<b>绝不出现任何具体序列化类名</b>——这正是序列化可替换在协议层的落地。</p>
  *
  * <p>控制帧：心跳无body（length=0）；握手帧body固定1字节status（协商结果见头里的
- * version/codec/compress，不走序列化器，避免"协商前还不知道用哪个序列化器"的死循环）。</p>
+ * version/codec/compress，不走序列化器，避免"协商前还不知道用哪个序列化器"的死循环）；
+ * 取消帧body固定1字节取消原因，同样不走序列化器。</p>
  *
  * <p>压缩策略：{@code msg.compress}给出期望算法，只有body达到阈值时才真正压缩，否则头里回填
  * {@link ProtocolConstants#COMPRESS_NONE}——接收端永远以头里的值为准，不会读错。</p>
@@ -48,6 +49,17 @@ public class RpcEncoder extends MessageToByteEncoder<RpcMessage> {
                     ProtocolConstants.COMPRESS_NONE, msg.getRequestId(), 0);
             log.debug("[RpcEncoder] type=HEARTBEAT, requestId={}, channel={}",
                     msg.getRequestId(), ctx.channel().remoteAddress());
+            return;
+        }
+
+        // 1.1取消帧：body仅1字节原因，不依赖任何序列化器（被取消的请求可能还没完成，与codec无关）
+        if (msg.isCancel()) {
+            writeHeader(out, msg.getVersion(), msg.getType(), msg.getCodec(),
+                    ProtocolConstants.COMPRESS_NONE, msg.getRequestId(), 1);
+            out.writeByte(msg.getStatus());
+            log.debug("[RpcEncoder] type=CANCEL, requestId={}, reason={}, channel={}",
+                    msg.getRequestId(), ProtocolConstants.cancelReasonText(msg.getStatus()),
+                    ctx.channel().remoteAddress());
             return;
         }
 

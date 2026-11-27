@@ -1,15 +1,19 @@
 # Conduit 集群容错（Cluster）
 
-`conduit-cluster` 回答三个问题：选哪个节点（`LoadBalancer`）、失败怎么办（`Cluster`）、
-不健康节点要不要先不打（`CircuitBreaker`）。
+`conduit-cluster` 回答四个问题：候选里哪些能去（`Router`）、选哪个节点（`LoadBalancer`）、
+失败怎么办（`Cluster`）、不健康节点要不要先不打（`CircuitBreaker`）。
 
 ```text
 RpcInvocationHandler
-  └─ Cluster（自适应代理，默认来自 @RpcReference / conduit.cluster.*）
-       ├─ LoadBalancer.select(...)        # 自适应代理，支持单次覆盖
-       └─ AbstractCluster.callWithBreaker # 节点级熔断闸门
-            └─ RemoteInvoker             # 真正的远程调用（由 conduit-client 注入）
+  └─ Router.route(...)                     # 按 version/group/tag 收窄候选，zone 软优先
+       └─ Cluster（自适应代理，默认来自 @RpcReference / conduit.cluster.*）
+            ├─ LoadBalancer.select(...)    # 自适应代理，支持单次覆盖
+            └─ AbstractCluster.callWithBreaker # 节点级熔断闸门
+                 └─ RemoteInvoker          # 真正的远程调用（由 conduit-client 注入）
 ```
+
+**为什么路由在负载均衡之前**：负载均衡只能在"给定的候选"里挑，候选里混着 v1/v2、灰度/正式、
+不同机房时，再公平地挑也是错的。所以顺序是 `discover → route → loadbalance`。
 
 **模块边界**：`cluster` 只依赖 `api/common/registry`，**不依赖 `remoting`**——真正发请求的能力由
 `conduit-client` 通过 `RemoteInvoker` 回调注入（`CompletableFuture<RpcResponse> invoke(ServiceMeta target, RpcRequest request)`），
@@ -40,7 +44,40 @@ RpcInvocationHandler
 
 ---
 
-## 2. Cluster：失败之后怎么办
+## 2. Router：先收窄候选（版本/分组/标签/机房）
+
+默认实现 `DefaultRouter`，SPI 名 `default`（可替换）。
+
+| 条件 | 来源 | 语义 |
+| --- | --- | --- |
+| 版本 | `@RpcReference(version)` / `RpcContext` 的 `conduit.version` | **硬过滤**：实例的 `version` 必须相等 |
+| 分组 | `@RpcReference(group)` / `conduit.group` | **硬过滤** |
+| 标签 | `@RpcReference(tag)` / `conduit.tag` | **硬过滤**：实例 `@RpcService(tag)` 必须相等 |
+| 机房 | `conduit.zone` / 配置 `conduit.router.zone` | **软优先**：同机房有实例就只去同机房，没有就跨机房 |
+
+规则细节：
+
+- 任何一项为 `null`/空串/`"*"` 都表示**不约束**——不声明版本的老调用行为完全不变；
+- 硬过滤后为空 → **直接失败**（`没有匹配的路由实例: ...`，错误里带上约束值与候选实例的实际属性）。
+  不回退到全量是刻意的：空结果几乎总是配置写错，静默回退会让流量悄悄打到错误的版本上；
+- 路由发生在**集群容错之前**，所以路由失败不会被 failover 重试（换节点也没用）；
+- 版本/分组/标签的取值来自注册信息：提供侧 `@RpcService(version/group/tag/zone)` → `ServiceMeta`
+  → 各注册中心（Nacos 实例 metadata / ZK 节点数据 / Etcd value）→ 消费侧 `discover`。
+
+**灰度切流**的典型用法（不改代码、不改引用）：
+
+```java
+// 把某个调用方实例整体导到灰度标签的提供者
+RpcContext.getContext().setAttachment(RpcAttachments.TAG, "gray");
+greetService.hello("x");
+```
+
+**同机房优先**：提供侧 `@RpcService(zone="sh-1")`；消费侧配置一次 `conduit.router.zone=sh-1`
+（进程部署位置，天然是配置而不是每次调用的参数）。
+
+---
+
+## 3. Cluster：失败之后怎么办
 
 | 策略 | 失败行为 | 返回 | 适用 |
 | --- | --- | --- | --- |
@@ -59,7 +96,7 @@ RpcInvocationHandler
 
 ---
 
-## 3. 超时与重试的总账（重要）
+## 4. 超时与重试的总账（重要）
 
 超时约束**单次**远程调用（`future.get(timeout)`），重试是它的**外层循环**。两条铁律：
 
@@ -71,7 +108,7 @@ RpcInvocationHandler
 
 ---
 
-## 4. 配置方式
+## 5. 配置方式
 
 ### `@RpcReference`
 
@@ -126,7 +163,7 @@ orderService.query(...); // attachments 随请求透传，并用于本次策略�
 
 ---
 
-## 5. 熔断器
+## 6. 熔断器
 
 ### 状态机
 
@@ -179,7 +216,7 @@ CircuitBreakerRegistry.options();                                // 当前默认
 
 ---
 
-## 6. 测试与观测
+## 7. 测试与观测
 
 | 关注点 | 用例 |
 | --- | --- |

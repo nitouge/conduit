@@ -4,6 +4,7 @@ import io.github.nitouge.conduit.api.ServiceMeta;
 import io.github.nitouge.conduit.common.exception.RpcException;
 import io.github.nitouge.conduit.registry.NotifyListener;
 import io.github.nitouge.conduit.registry.support.AbstractRegistry;
+import io.github.nitouge.conduit.registry.support.ServiceMetaCodec;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -251,25 +252,14 @@ public class ZookeeperRegistry extends AbstractRegistry {
     }
 
     private static byte[] encode(ServiceMeta service) {
-        return (service.getHost() + "|" + service.getPort() + "|" + service.getWeight())
-                .getBytes(StandardCharsets.UTF_8);
+        // host|port|weight|version|group|tag|zone（后四项URL编码），见 ServiceMetaCodec
+        return ServiceMetaCodec.encode(service).getBytes(StandardCharsets.UTF_8);
     }
 
     private static ServiceMeta decode(String serviceName, byte[] data) {
         if (data == null || data.length == 0) {
             return null;
         }
-        String text = new String(data, StandardCharsets.UTF_8);
-        String[] parts = text.split("\\|");
-        if (parts.length < 2) {
-            return null;
-        }
-        try {
-            int port = Integer.parseInt(parts[1].trim());
-            int weight = parts.length > 2 ? Integer.parseInt(parts[2].trim()) : 100;
-            return new ServiceMeta(serviceName, parts[0].trim(), port, weight);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        return ServiceMetaCodec.decode(serviceName, new String(data, StandardCharsets.UTF_8));
     }
 }

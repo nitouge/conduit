@@ -84,8 +84,8 @@
 
 按 [docs/LAYERS.md](docs/LAYERS.md) 的三层模型盘点后，剩余缺口：
 
-- [ ] 请求取消与 deadline 传递 `M` — 上游超时后下游仍在白跑；增加 CANCEL 控制帧，并把 deadline 放进 attachments，服务端到点自我中断
-- [ ] 路由规则 `M` — `RpcRequest.version/group` 字段已有但未参与选路；按 version/group/tag 过滤节点，支撑灰度与多版本
+- [x] 请求取消与 deadline 传递 `M` — `TYPE_CANCEL` 控制帧（body 1 字节原因）+ 服务端 `ServerCallRegistry` 中断在途线程；deadline 以绝对时间写进 attachments，逐跳取 `min(上游, now+本地超时)`，服务端到点自我中断、已过期请求不占业务线程；客户端本地等待与每次重试的传输超时都用剩余预算
+- [x] 路由规则 `M` — `ServiceMeta` 增加 version/group/tag/zone 并随注册中心发布（Nacos metadata / ZK 节点数据 / Etcd value）；新增 `Router` SPI，`discover → route → loadbalance`：version/group/tag 硬过滤、zone 软优先，硬过滤为空直接报错；`@RpcService`/`@RpcReference` 与 `RpcContext` attachment 双向支持
 - [ ] QPS 限流 `S` — 目前只有并发隔离（`ActiveLimitFilter` 信号量）；补令牌桶形态的方法级/全局限流
 - [ ] 重试幂等 `M` — Failover 会重放请求，但无幂等键与服务端去重；非幂等接口开重试可能重复执行
 - [ ] 追踪 span 化与采样 `M` — 只有 traceId，缺 spanId/父子关系/采样率，异步线程上下文也未传播

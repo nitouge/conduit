@@ -4,6 +4,7 @@ import io.github.nitouge.conduit.api.ServiceMeta;
 import io.github.nitouge.conduit.common.exception.RpcException;
 import io.github.nitouge.conduit.registry.NotifyListener;
 import io.github.nitouge.conduit.registry.support.AbstractRegistry;
+import io.github.nitouge.conduit.registry.support.ServiceMetaCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>存储模型：</p>
  * <pre>
- * /conduit/services/{serviceName}/{host}:{port}   value={weight}，带TTL租约
+ * /conduit/services/{serviceName}/{host}:{port}   value=host|port|weight|version|group|tag|zone，带TTL租约
  * </pre>
  * <ul>
  *   <li>注册 = 申请租约（默认30s）+ 带租约写入；后台每10s续租；续租失败自动重新注册；</li>
@@ -65,7 +66,9 @@ public class EtcdRegistry extends AbstractRegistry {
         cancelLease(key);
         try {
             long leaseId = ops.grantLease(LEASE_TTL_SECONDS);
-            ops.put(key, String.valueOf(service.getWeight()), leaseId);
+            // value 带完整实例描述（host|port|weight|version|group|tag|zone），消费侧 discover 后
+            // 才能按版本/分组/标签路由；早期版本只写 weight，解码侧保持兼容
+            ops.put(key, ServiceMetaCodec.encode(service), leaseId);
             ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(
                     () -> keepAlive(service, key, leaseId),
                     KEEPALIVE_INTERVAL_SECONDS, KEEPALIVE_INTERVAL_SECONDS, TimeUnit.SECONDS);
@@ -184,8 +187,15 @@ public class EtcdRegistry extends AbstractRegistry {
         return prefixOf(service.getServiceName()) + service.getHost() + ":" + service.getPort();
     }
 
-    /** 从key的剩余部分解析host:port，value解析weight */
+    /**
+     * 解析一个实例：优先按 {@link ServiceMetaCodec} 的完整格式解（带版本/分组/标签/机房）；
+     * 解析不出来时回退到早期格式——key 里是 {@code host:port}、value 只有 weight。
+     */
     private static ServiceMeta parse(String serviceName, String prefix, EtcdOperations.KeyValue kv) {
+        ServiceMeta decoded = ServiceMetaCodec.decode(serviceName, kv.value());
+        if (decoded != null) {
+            return decoded;
+        }
         String path = kv.key();
         if (path == null || !path.startsWith(prefix)) {
             return null;

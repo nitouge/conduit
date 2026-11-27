@@ -1,14 +1,17 @@
 package io.github.nitouge.conduit.client.proxy;
 
+import io.github.nitouge.conduit.api.RpcAttachments;
 import io.github.nitouge.conduit.api.RpcContext;
 import io.github.nitouge.conduit.api.RpcRequest;
 import io.github.nitouge.conduit.api.RpcResponse;
 import io.github.nitouge.conduit.api.ServiceMeta;
+import io.github.nitouge.conduit.client.ReferenceOptions;
 import io.github.nitouge.conduit.client.RpcClient;
 import io.github.nitouge.conduit.cluster.Cluster;
 import io.github.nitouge.conduit.cluster.ClusterOptions;
 import io.github.nitouge.conduit.cluster.LoadBalancer;
 import io.github.nitouge.conduit.cluster.RemoteInvoker;
+import io.github.nitouge.conduit.cluster.router.Router;
 import io.github.nitouge.conduit.common.exception.RpcException;
 import io.github.nitouge.conduit.common.filter.Filter;
 import io.github.nitouge.conduit.common.filter.FilterChain;
@@ -39,8 +42,11 @@ import java.util.concurrent.TimeoutException;
  *
  * <ul>
  *   <li><b>直连</b>：固定 {@link ServiceMeta}。</li>
- *   <li><b>注册中心</b>：每次 {@code discover} 取列表，交给 {@link Cluster}（容错/重试）+
+ *   <li><b>注册中心</b>：每次 {@code discover} 取列表，先经 {@link Router} 按
+ *   version/group/tag 收窄候选（同机房优先），再交给 {@link Cluster}（容错/重试）+
  *   {@link LoadBalancer}（选址）+ 熔断完成调用。</li>
+ *   <li><b>deadline</b>：把 {@code min(上游deadline, now+本引用超时)} 写进 attachments 下发，
+ *   本地等待与每次重试的传输超时都用剩余预算——上游不等了，下游不会再白跑。</li>
  *   <li><b>同步/异步统一调用链</b>：{@link #terminal()} 是同步、异步共用的链尾——都经过
  *   Cluster → LoadBalancer → RemoteInvoker → RpcClient，返回同一个
  *   {@code CompletableFuture<RpcResponse>}。同步只是在链外多做一次
@@ -79,17 +85,30 @@ public class RpcInvocationHandler implements InvocationHandler {
     /** 重试/退避/熔断参数（来自@RpcReference与全局conduit.cluster.*） */
     private final ClusterOptions clusterOptions;
 
+    /** 该引用的静态路由偏好（version/group/tag），随每次请求下发 */
+    private final ReferenceOptions referenceOptions;
+
+    /** 路由：在负载均衡之前把候选实例收窄到本次调用真正该去的那一批 */
+    private final Router router;
+
     /** 消费侧filter链（按order排序、已过滤CONSUMER侧）；无filter时为空列表 */
     private final List<Filter> consumerFilters;
 
     /** M1直连构造（默认集群参数；直连模式不使用Cluster，参数仅保留一致性） */
     public RpcInvocationHandler(Class<?> interfaceClass, ServiceMeta target, RpcClient client, long timeoutMillis) {
-        this(interfaceClass, target, client, timeoutMillis, ClusterOptions.defaults());
+        this(interfaceClass, target, client, timeoutMillis, ClusterOptions.defaults(), ReferenceOptions.empty());
     }
 
     /** M1直连构造 + 自定义集群参数 */
     public RpcInvocationHandler(Class<?> interfaceClass, ServiceMeta target, RpcClient client,
                                 long timeoutMillis, ClusterOptions clusterOptions) {
+        this(interfaceClass, target, client, timeoutMillis, clusterOptions, ReferenceOptions.empty());
+    }
+
+    /** M1直连构造 + 集群参数 + 路由偏好 */
+    public RpcInvocationHandler(Class<?> interfaceClass, ServiceMeta target, RpcClient client,
+                                long timeoutMillis, ClusterOptions clusterOptions,
+                                ReferenceOptions referenceOptions) {
         this.interfaceClass = interfaceClass;
         this.directTarget = target;
         this.registry = null;
@@ -98,6 +117,8 @@ public class RpcInvocationHandler implements InvocationHandler {
         this.client = client;
         this.timeoutMillis = timeoutMillis;
         this.clusterOptions = (clusterOptions == null) ? ClusterOptions.defaults() : clusterOptions;
+        this.referenceOptions = (referenceOptions == null) ? ReferenceOptions.empty() : referenceOptions;
+        this.router = ExtensionLoader.getExtensionLoader(Router.class).getDefaultExtension();
         this.consumerFilters = FilterLoader.load(Side.CONSUMER);
     }
 
@@ -119,6 +140,15 @@ public class RpcInvocationHandler implements InvocationHandler {
                                 RpcClient client, long timeoutMillis,
                                 String clusterName, String loadBalanceName,
                                 ClusterOptions clusterOptions) {
+        this(interfaceClass, registry, client, timeoutMillis, clusterName, loadBalanceName,
+                clusterOptions, ReferenceOptions.empty());
+    }
+
+    /** 注册中心构造（指定策略 + 重试参数 + 路由偏好） */
+    public RpcInvocationHandler(Class<?> interfaceClass, Registry registry,
+                                RpcClient client, long timeoutMillis,
+                                String clusterName, String loadBalanceName,
+                                ClusterOptions clusterOptions, ReferenceOptions referenceOptions) {
         this.interfaceClass = interfaceClass;
         this.directTarget = null;
         this.registry = registry;
@@ -129,6 +159,8 @@ public class RpcInvocationHandler implements InvocationHandler {
         this.cluster = ExtensionLoader.getExtensionLoader(Cluster.class).getAdaptiveExtension(clusterName);
         this.loadBalancer = ExtensionLoader.getExtensionLoader(LoadBalancer.class).getAdaptiveExtension(loadBalanceName);
         this.clusterOptions = (clusterOptions == null) ? ClusterOptions.defaults() : clusterOptions;
+        this.referenceOptions = (referenceOptions == null) ? ReferenceOptions.empty() : referenceOptions;
+        this.router = ExtensionLoader.getExtensionLoader(Router.class).getDefaultExtension();
         this.consumerFilters = FilterLoader.load(Side.CONSUMER);
         // 订阅只是感知列表变更的增强，失败不应阻断代理创建；invoke时仍走discover（带缓存兜底）。
         try {
@@ -168,6 +200,10 @@ public class RpcInvocationHandler implements InvocationHandler {
             request.setAttachments(new HashMap<>(attachments));
         }
         RpcContext.removeContext();
+        // 路由偏好：单次调用的attachment覆盖@RpcReference的静态声明（灰度切流就是这么做的）
+        applyReference(request);
+        // deadline：min(上游已带来的deadline, now+本引用超时)，随请求下发；下游据此到点自我中断
+        RpcAttachments.applyDeadline(request, timeoutMillis, System.currentTimeMillis());
 
         boolean async = method.getReturnType() == CompletableFuture.class;
         log.debug("[RpcInvocationHandler] 发起调用 {}#{}, mode={}, {}={}, attachments={}",
@@ -194,12 +230,14 @@ public class RpcInvocationHandler implements InvocationHandler {
     private Object invokeSync(RpcRequest request, Method method) throws Throwable {
         FilterChain chain = FilterChainBuilder.build(consumerFilters, terminal());
 
+        // 等待上限 = min(本引用超时, deadline - now)：deadline 是整条链路共享的预算，
+        // 上游给了更早的截止时间，这里就不该按自己的超时傻等
+        long budget = RpcAttachments.budgetMillis(request, timeoutMillis, System.currentTimeMillis());
         RpcResponse response;
         try {
-            response = chain.invoke(request).get(timeoutMillis, TimeUnit.MILLISECONDS);
+            response = chain.invoke(request).get(budget, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            throw new RpcException("调用超时(" + timeoutMillis + "ms): "
-                    + interfaceClass.getName() + "#" + method.getName(), e);
+            throw new RpcException(timeoutMessage(budget, method), e);
         } catch (ExecutionException e) {
             throw toRpcThrowable(e.getCause() != null ? e.getCause() : e, method);
         } catch (InterruptedException e) {
@@ -211,6 +249,12 @@ public class RpcInvocationHandler implements InvocationHandler {
             throw response.getException();
         }
         return response.getData();
+    }
+
+    /** 超时原因尽量说清「是本地超时还是deadline预算耗尽」——两者的处理方式完全不同 */
+    private String timeoutMessage(long budget, Method method) {
+        String reason = budget < timeoutMillis ? "deadline预算耗尽" : "本地超时";
+        return "调用超时(" + budget + "ms, " + reason + "): " + interfaceClass.getName() + "#" + method.getName();
     }
 
     /** 把链上抛出的异常规整为可抛出的类型：RpcException/RuntimeException原样，其余包成RpcException。 */
@@ -244,24 +288,70 @@ public class RpcInvocationHandler implements InvocationHandler {
     }
 
     /**
-     * 同步/异步共用的链尾终端：走注册中心discover + {@link Cluster#invoke}（内含负载均衡+容错重试）；
-     * 直连模式则直接 {@code sendAsync} 到固定目标（无候选可选，Cluster语义在此不适用）。
+     * 同步/异步共用的链尾终端：discover → {@link Router}（版本/分组/标签/机房）→
+     * {@link Cluster#invoke}（内含负载均衡+容错重试）；直连模式则直接 {@code sendAsync}
+     * 到固定目标（无候选可选，Cluster/路由语义在此不适用）。
      *
-     * <p>两条路径都不同步抛异常——统一通过future的正常/异常完成表达结果，保持与
-     * {@link FilterChain} 的契约一致。</p>
+     * <p>链路契约要求终端<b>绝不同步抛出</b>（无filter时chain就是terminal本身），
+     * 故路由为空/集群无候选等异常都转成failed future。</p>
      */
     private FilterChain terminal() {
         if (registry != null) {
             return req -> {
-                List<ServiceMeta> providers = registry.discover(interfaceClass.getName());
-                return cluster.invoke(providers, req, loadBalancer, remoteInvoker(), clusterOptions);
+                try {
+                    List<ServiceMeta> providers = router.route(registry.discover(interfaceClass.getName()), req);
+                    return cluster.invoke(providers, req, loadBalancer, remoteInvoker(), clusterOptions);
+                } catch (Throwable t) {
+                    return failed(t);
+                }
             };
         }
-        return req -> client.sendAsync(req, directTarget, timeoutMillis);
+        return req -> client.sendAsync(req, directTarget, timeoutFor(req));
+    }
+
+    /** 把同步异常转成统一的failed future，保持 FilterChain 契约 */
+    private static CompletableFuture<RpcResponse> failed(Throwable cause) {
+        CompletableFuture<RpcResponse> failed = new CompletableFuture<>();
+        failed.completeExceptionally(cause);
+        return failed;
+    }
+
+    /** 每次真正发起远程调用的超时预算（重试也会被 deadline 收敛，越到后面预算越小） */
+    private long timeoutFor(RpcRequest request) {
+        return RpcAttachments.budgetMillis(request, timeoutMillis, System.currentTimeMillis());
     }
 
     /** 给集群层注入的远程调用回调：直接转发到RpcClient的异步发送，传输失败体现为future异常完成。 */
     private RemoteInvoker remoteInvoker() {
-        return (target, req) -> client.sendAsync(req, target, timeoutMillis);
+        return (target, req) -> client.sendAsync(req, target, timeoutFor(req));
+    }
+
+    /**
+     * 把路由偏好写进请求：{@code RpcContext} 的 attachment（单次调用）优先于
+     * {@link ReferenceOptions}（{@code @RpcReference} 的静态声明）。
+     */
+    private void applyReference(RpcRequest request) {
+        String version = firstNonBlank(request.getAttachment(RpcAttachments.VERSION), referenceOptions.getVersion());
+        if (version != null) {
+            request.setVersion(version);
+        }
+        String group = firstNonBlank(request.getAttachment(RpcAttachments.GROUP), referenceOptions.getGroup());
+        if (group != null) {
+            request.setGroup(group);
+        }
+        String tag = firstNonBlank(request.getAttachment(RpcAttachments.TAG), referenceOptions.getTag());
+        if (tag != null) {
+            request.setAttachment(RpcAttachments.TAG, tag);
+        }
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first.trim();
+        }
+        if (second != null && !second.isBlank()) {
+            return second.trim();
+        }
+        return null;
     }
 }

@@ -52,11 +52,13 @@ public class ServiceExporter implements SmartInitializingSingleton, DisposableBe
             // 用ClassUtils.getUserClass还原CGLIB代理（如被@Transactional/@Async增强）的原始类，
             // 否则代理子类的getInterfaces()不含业务接口，会导致@RpcService漏暴露。
             Class<?> userClass = ClassUtils.getUserClass(bean);
+            // 版本/分组/标签/机房随实例注册出去，消费侧才可能按它们路由
+            RpcService service = userClass.getAnnotation(RpcService.class);
             for (Class<?> iface : userClass.getInterfaces()) {
                 if (isFrameworkInterface(iface)) {
                     continue; // 跳过Serializable/Comparable、Spring代理接口等非业务接口
                 }
-                server.export(iface, bean);
+                server.export(iface, bean, service);
                 exported++;
             }
             if (exported == 0) {

@@ -62,6 +62,7 @@ import java.util.concurrent.atomic.LongAdder;
  *   <li>向 {@link ConnectionPool} 要一条该地址的<b>已握手</b>连接（没有就建，建链单飞）；</li>
  *   <li>把requestId登记到该连接的在途集合，用协商出的version/codec/compress编码请求帧写出；</li>
  *   <li>响应到达时由 {@link NettyClientHandler} 按requestId唤醒future；</li>
+ *   <li>超时或调用方放弃时，在清理在途表的同时给对端发一帧 CANCEL（让服务端别白跑）；</li>
  *   <li>连接断开时在途请求统一失败并触发后台重连。</li>
  * </ol>
  *
@@ -213,6 +214,8 @@ public class NettyClient implements AutoCloseable {
                 Channel channel = channelRef.get();
                 if (channel != null) {
                     inFlight(channel).remove(requestId);
+                    // 告诉服务端"我不等了"：否则服务端线程仍会把这次调用跑完（长尾放大的根源）
+                    sendCancel(channel, requestId, ProtocolConstants.CANCEL_CLIENT_TIMEOUT);
                 }
                 PendingRequests.completeExceptionally(requestId,
                         new TimeoutException("调用超时(" + timeoutMillis + "ms)"));
@@ -226,6 +229,14 @@ public class NettyClient implements AutoCloseable {
         future.whenComplete((response, error) -> {
             timeoutTask.cancel(false);
             pendingRequestIds.remove(requestId);
+            // 调用方主动取消（future.cancel/CompletableFuture 链上放弃）：同样把取消送达到对端
+            if (future.isCancelled()) {
+                Channel channel = channelRef.get();
+                if (channel != null) {
+                    inFlight(channel).remove(requestId);
+                    sendCancel(channel, requestId, ProtocolConstants.CANCEL_CALLER_ABANDONED);
+                }
+            }
         });
         // 与close竞态：调度成功后客户端可能已关闭（关闭逻辑已清空在途请求），这里再兜底一次
         if (closed.get()) {
@@ -278,6 +289,29 @@ public class NettyClient implements AutoCloseable {
             });
         });
         return future;
+    }
+
+    /**
+     * 尽力而为地给对端发一帧 CANCEL：告诉服务端这次调用不必再跑。
+     *
+     * <p>失败只记 debug——调用方此刻已经拿到结果（超时/取消），取消帧发不出去不应改变任何语义；
+     * 连接已断时也没必要发（对端要么已断开、要么稍后会因连接断开自行收尾）。</p>
+     */
+    private void sendCancel(Channel channel, long requestId, byte reason) {
+        if (channel == null || !channel.isActive()) {
+            return;
+        }
+        Negotiated negotiated = Handshake.negotiated(channel);
+        byte version = negotiated != null ? negotiated.getVersion() : ProtocolConstants.VERSION;
+        byte codec = negotiated != null ? negotiated.getCodec() : options.getCodec();
+        RpcMessage cancel = RpcMessage.cancel(requestId, codec, version, reason);
+        channel.writeAndFlush(cancel).addListener(writeFuture -> {
+            if (!writeFuture.isSuccess()) {
+                log.debug("[NettyClient] CANCEL发送失败 requestId={}, reason={}: {}",
+                        requestId, ProtocolConstants.cancelReasonText(reason),
+                        String.valueOf(writeFuture.cause()));
+            }
+        });
     }
 
     /**

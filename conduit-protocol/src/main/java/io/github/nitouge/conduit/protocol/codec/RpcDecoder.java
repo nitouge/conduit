@@ -107,7 +107,28 @@ public class RpcDecoder extends ByteToMessageDecoder {
             return;
         }
 
-        // 4.业务帧：类型/版本必须合法
+        // 4.取消帧：body固定1字节原因，控制帧不走序列化器
+        if (msg.isCancel()) {
+            if (!ProtocolConstants.isSupportedVersion(version)) {
+                in.resetReaderIndex();
+                log.warn("[RpcDecoder] 取消帧协议版本不支持 version={}，关连接", version);
+                ctx.close();
+                throw new RpcException("不支持的协议版本: " + version);
+            }
+            if (length != 1) {
+                in.resetReaderIndex();
+                log.warn("[RpcDecoder] 取消帧长度非法 length={}, 关连接", length);
+                ctx.close();
+                throw new RpcException("取消帧长度非法: " + length);
+            }
+            msg.setStatus(in.readByte());
+            log.debug("[RpcDecoder] type=CANCEL, requestId={}, reason={}",
+                    requestId, ProtocolConstants.cancelReasonText(msg.getStatus()));
+            out.add(msg);
+            return;
+        }
+
+        // 5.业务帧：类型/版本必须合法
         if (type != ProtocolConstants.TYPE_REQUEST && type != ProtocolConstants.TYPE_RESPONSE) {
             in.resetReaderIndex();
             log.warn("[RpcDecoder] 非法 type={}, 关连接", type);

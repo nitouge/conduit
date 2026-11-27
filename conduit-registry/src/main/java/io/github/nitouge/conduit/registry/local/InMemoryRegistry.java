@@ -23,9 +23,12 @@ public class InMemoryRegistry implements Registry {
 
     @Override
     public void register(ServiceMeta service) {
-        // addIfAbsent在CopyOnWriteArrayList上是原子的，避免并发重复注册
-        store.computeIfAbsent(service.getServiceName(), k -> new CopyOnWriteArrayList<>())
-                .addIfAbsent(service);
+        CopyOnWriteArrayList<ServiceMeta> list =
+                store.computeIfAbsent(service.getServiceName(), k -> new CopyOnWriteArrayList<>());
+        // 同一节点（serviceName+host+port）重新注册时替换旧对象：version/group/tag/zone 可能已经变了，
+        // 若只 addIfAbsent 就会保留旧属性，消费侧会一直按过期的版本/标签路由。
+        list.remove(service);
+        list.addIfAbsent(service);
         notifyListeners(service.getServiceName());
     }
 

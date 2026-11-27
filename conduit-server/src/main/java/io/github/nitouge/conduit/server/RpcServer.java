@@ -1,6 +1,7 @@
 package io.github.nitouge.conduit.server;
 
 import io.github.nitouge.conduit.api.ServiceMeta;
+import io.github.nitouge.conduit.api.annotation.RpcService;
 import io.github.nitouge.conduit.registry.Registry;
 import io.github.nitouge.conduit.remoting.ServerOptions;
 import io.github.nitouge.conduit.remoting.netty.NettyServer;
@@ -66,21 +67,76 @@ public class RpcServer {
      * 若已start（端口已就绪），则立即注册。</p>
      */
     public void export(Class<?> interfaceClass, Object impl) {
+        export(interfaceClass, impl, null, null, null, null, 100);
+    }
+
+    /**
+     * 暴露一个服务，并把 {@code @RpcService} 声明的路由属性（version/group/tag/zone/weight）
+     * 一并写进注册信息。
+     *
+     * <p>版本/分组/标签/机房是「消费侧怎么选中我」的声明，必须随实例一起发布；只放进注册缓存而不
+     * 发布，消费侧发现到的就是一堆无法区分版本的节点，灰度/多版本就无从谈起。</p>
+     */
+    public void export(Class<?> interfaceClass, Object impl, RpcService service) {
+        if (service == null) {
+            export(interfaceClass, impl);
+            return;
+        }
+        export(interfaceClass, impl, service.version(), service.group(),
+                service.tag(), service.zone(), service.weight());
+    }
+
+    /**
+     * 以编程方式暴露服务并声明路由属性（非Spring场景，或测试里直接构造多版本/多标签集群）。
+     *
+     * @param version 服务版本；空表示未声明（消费侧指定版本时不会命中）
+     * @param group   服务分组；空表示未声明
+     * @param tag     实例标签（gray/canary）；空表示未打标签
+     * @param zone    实例机房/可用区；空表示未知
+     * @param weight  负载均衡权重
+     */
+    public void export(Class<?> interfaceClass, Object impl, String version, String group,
+                       String tag, String zone, int weight) {
         String serviceName = interfaceClass.getName(); // 必要时拼接version/group
         serviceCache.register(serviceName, impl);
 
+        ServiceMeta meta = new ServiceMeta(serviceName, host, port, weight <= 0 ? 100 : weight);
+        meta.routeAttributes(blankToNull(version), blankToNull(group), blankToNull(tag), blankToNull(zone));
+
         if (registry == null) {
-            log.info("已暴露服务(直连): {} -> {}", serviceName, impl.getClass().getName());
+            log.info("已暴露服务(直连): {} -> {} {}", serviceName, impl.getClass().getName(), routeText(meta));
             return;
         }
-        ServiceMeta meta = new ServiceMeta(serviceName, host, port, 100);
         exported.add(meta);
         if (started) {
             registry.register(meta); // 端口已就绪，立即注册
-            log.info("已暴露并注册服务: {} -> {}:{}", serviceName, host, port);
+            log.info("已暴露并注册服务: {} -> {}:{} {}", serviceName, host, port, routeText(meta));
         } else {
-            log.info("已暴露服务(待端口就绪后注册): {} -> {}:{}", serviceName, host, port);
+            log.info("已暴露服务(待端口就绪后注册): {} -> {}:{} {}", serviceName, host, port, routeText(meta));
         }
+    }
+
+    /** 注册信息里的路由属性，仅用于日志（未声明时不输出噪音） */
+    private static String routeText(ServiceMeta meta) {
+        StringBuilder sb = new StringBuilder();
+        appendIfPresent(sb, "version", meta.getVersion());
+        appendIfPresent(sb, "group", meta.getGroup());
+        appendIfPresent(sb, "tag", meta.getTag());
+        appendIfPresent(sb, "zone", meta.getZone());
+        return sb.isEmpty() ? "" : sb.toString();
+    }
+
+    private static void appendIfPresent(StringBuilder sb, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            sb.append(name).append('=').append(value).append(' ');
+        }
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     /** 启动Netty并在端口bind完成后再把已暴露服务注册到注册中心 */

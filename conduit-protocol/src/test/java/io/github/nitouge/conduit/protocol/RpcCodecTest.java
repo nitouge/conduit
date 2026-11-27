@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 协议编解码单元测试：帧布局、控制帧（心跳/握手）、压缩阈值、版本与长度校验。
+ * 协议编解码单元测试：帧布局、控制帧（心跳/握手/取消）、压缩阈值、版本与长度校验。
  */
 class RpcCodecTest {
 
@@ -196,6 +196,43 @@ class RpcCodecTest {
         assertTrue(decoded.isHandshakeReject());
         assertEquals(ProtocolConstants.HANDSHAKE_NO_COMMON_VERSION, decoded.getStatus());
         assertEquals(ProtocolConstants.MAX_SUPPORTED_VERSION, decoded.getVersion());
+    }
+
+    // ------------------------------------------------------------ 取消帧
+
+    @Test
+    void cancelRoundTripCarriesRequestIdAndReason() {
+        RpcMessage cancel = RpcMessage.cancel(4242L, ProtocolConstants.CODEC_KRYO,
+                ProtocolConstants.VERSION, ProtocolConstants.CANCEL_CLIENT_TIMEOUT);
+        ByteBuf bytes = encode(cancel);
+
+        // 与握手帧同构：body固定1字节（取消原因），不经过序列化器
+        assertEquals(1, bytes.getInt(ProtocolConstants.LENGTH_FIELD_OFFSET));
+        assertEquals(ProtocolConstants.HEADER_LENGTH + 1, bytes.readableBytes());
+        assertEquals(ProtocolConstants.TYPE_CANCEL, bytes.getByte(3));
+        assertEquals(ProtocolConstants.COMPRESS_NONE, bytes.getByte(5), "控制帧不压缩");
+        assertEquals(4242L, bytes.getLong(6));
+
+        RpcMessage decoded = decodeOne(bytes);
+        assertTrue(decoded.isCancel());
+        assertTrue(decoded.isControlFrame());
+        assertEquals(4242L, decoded.getRequestId());
+        assertEquals(ProtocolConstants.CANCEL_CLIENT_TIMEOUT, decoded.getStatus());
+        assertNull(decoded.getPayload());
+    }
+
+    @Test
+    void cancelWithIllegalBodyLengthClosesConnection() {
+        ByteBuf bytes = frame(ProtocolConstants.VERSION, ProtocolConstants.TYPE_CANCEL,
+                ProtocolConstants.CODEC_JDK, ProtocolConstants.COMPRESS_NONE, 1L, new byte[]{1, 2, 3});
+        assertProtocolViolation(decoderChannel(), bytes);
+    }
+
+    @Test
+    void cancelWithUnsupportedVersionClosesConnection() {
+        ByteBuf bytes = frame((byte) 99, ProtocolConstants.TYPE_CANCEL,
+                ProtocolConstants.CODEC_JDK, ProtocolConstants.COMPRESS_NONE, 1L, new byte[]{0});
+        assertProtocolViolation(decoderChannel(), bytes);
     }
 
     // ------------------------------------------------------------ 压缩

@@ -37,7 +37,7 @@ bug 修复，新增能力尽量以"可选项 + 默认关闭"的方式加入，�
 | --- | --- |
 | `magic` | 固定 `0xCAFE`，第一道防线，非法直接断开 |
 | `version` | 帧格式版本；握手帧里是「提议版本」，ACK 帧里是「协商结果」 |
-| `type` | `1` 请求 / `2` 响应 / `3` 心跳 / `4` 握手 / `5` 握手ACK / `6` 握手拒绝 |
+| `type` | `1` 请求 / `2` 响应 / `3` 心跳 / `4` 握手 / `5` 握手ACK / `6` 握手拒绝 / `7` 取消 |
 | `codec` | 序列化 id：`1` jdk / `2` json / `3` kryo / `4` protostuff |
 | `compress` | 压缩算法：`0` 无 / `1` gzip；握手帧里是「压缩能力提议」 |
 | `requestId` | 请求-响应关联的唯一凭证（控制帧为 0） |
@@ -48,6 +48,9 @@ bug 修复，新增能力尽量以"可选项 + 默认关闭"的方式加入，�
 - **心跳**：`length=0`，无 body。
 - **握手 / ACK / 拒绝**：body 固定 1 字节 `status`，**不经过序列化器**——协商前两端还没约定
   codec，用序列化器会造成"先有鸡还是先有蛋"。
+- **取消（CANCEL）**：`requestId` 指向**被取消的那次请求**，body 固定 1 字节原因
+  （`0` 客户端超时 / `1` 调用方放弃 / `2` deadline 到点），同样不经过序列化器——
+  被取消的请求可能还没跑完，与它的 codec 无关。
 
 > **为什么是 18 字节而不是 16 字节？**
 > 18 字节头是项目自 M1 起的既有布局，本次传输层加固**没有改变头长度**：版本协商等新能力
@@ -119,7 +122,54 @@ PING/PONG 双向保活：
 
 ---
 
-## 6. 连接池
+## 6. 取消与 deadline（CANCEL 控制帧）
+
+**问题**：客户端超时只是"我不等了"，服务端线程仍在跑那个已经没人要的方法。上游一次超时会
+在下游放大成一串白跑的长尾请求。
+
+**解法**：把"不等了"这个事实显式送达对端。
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    C->>S: REQUEST(requestId=42, deadline=now+300ms)
+    S->>S: 业务线程开始执行
+    Note over C: 300ms 到点（本地超时或deadline）
+    C->>S: CANCEL(requestId=42, reason=CLIENT_TIMEOUT)
+    S->>S: 中断正在执行requestId=42的线程
+    Note over S: 已取消 → 不回写响应（对端已经不收了）
+```
+
+两条触发路径，共用服务端同一张在途表（`ServerCallRegistry`）：
+
+| 触发方 | 条件 | 服务端行为 |
+| --- | --- | --- |
+| 客户端 | 本地超时 / `future.cancel` | 发 `CANCEL`，其中 `reason` 标明原因 |
+| 服务端自己 | 请求 attachment 的 `conduit.deadline` 到点 | 中断执行线程；因对端可能还在等，回一帧错误说明 |
+
+**deadline 的传递规则**：`deadline` 是**绝对时间**（epoch 毫秒），放在 attachments 里随请求
+下发。每一跳取 `min(上游deadline, now+本地超时)`：
+
+```text
+A(超时1000) → B(超时1000) → C
+A 给 B 的 deadline = T+1000
+B 给 C 的 deadline = min(T+1000, T_B+1000)
+```
+
+- 上游给了更早的截止时间，下游就按剩余预算发请求、按剩余预算等待——不会出现"上游 1s 就放弃、
+  下游还在按自己的 3s 超时等着"；
+- 已经过期的请求到达服务端时**连业务线程都不占用**，直接回错误；
+- 每一跳的传输超时也是剩余预算（`RpcAttachments.budgetMillis`），重试同样被 deadline 收敛。
+
+**中断语义**：取消时对正在执行业务方法的线程 `Thread.interrupt()`。业务方法若在 `sleep`/
+`wait`/阻塞IO 上会立刻以 `InterruptedException` 结束；若它不响应中断，框架不会强杀线程，只是
+不再回写响应（对调用方而言结果一样：早就不等了）。线程归还业务线程池前会清掉中断标记，避免
+把标记带给线程池里的下一个任务。
+
+---
+
+## 7. 连接池
 
 - 每个目标地址一个连接池；默认 `max-connections-per-address=1`，即"一条长连接复用"。
 - 配置 >1 时：
@@ -135,7 +185,7 @@ PING/PONG 双向保活：
 
 ---
 
-## 7. 断线自动重连
+## 8. 断线自动重连
 
 - 连接断开后，`ReconnectManager` 在后台按**指数退避**重连：
   `delay = min(base << (attempt-1), max)`，默认 1s 起步、30s 封顶、最多 5 次。
@@ -146,7 +196,7 @@ PING/PONG 双向保活：
 
 ---
 
-## 8. 链路加密（TLS）
+## 9. 链路加密（TLS）
 
 传输层只依赖一个 `SslContext`：
 
@@ -168,7 +218,7 @@ new NettyClient(ClientOptions.builder().sslContext(clientTls).build());
 
 ---
 
-## 9. 配置
+## 10. 配置
 
 ### Spring Boot（`application.yml`）
 
@@ -227,7 +277,7 @@ new RpcServer(host, port, serverOptions);
 
 ---
 
-## 10. 不变量（修改协议/传输层时必须保持）
+## 11. 不变量（修改协议/传输层时必须保持）
 
 1. 头字段顺序与长度不变；新增字段走 `version` 协商或 `type` 扩展。
 2. 握手完成前不承载业务帧；握手失败/超时的连接必须关闭，不得进入连接池。
@@ -236,3 +286,7 @@ new RpcServer(host, port, serverOptions);
 5. 编解码层只依赖 `Serializer` 接口与 `SerializerFactory`，不得出现具体序列化实现。
 6. 在途请求必须在 响应/写失败/连接断开/超时 四条路径上都被清理（无泄漏）。
 7. 连接池中的连接数不超过配置上限；握手成功的连接才可复用。
+8. 控制帧（心跳/握手/取消）的 body 布局固定且不经过序列化器；解码器的控制帧分支必须先于
+   "业务帧类型校验"，否则新增控制帧会被当成非法类型直接断链。
+9. 服务端每个在途请求必须在 完成/cancel 帧/deadline 三条路径上都从 `ServerCallRegistry` 移除；
+   业务线程归还线程池前必须清掉中断标记。
